@@ -1093,6 +1093,36 @@ input[name='host']:focus {
     color: #fff;
 }
 
+/* Language switcher (login page) */
+.login-lang-switcher {
+  position: absolute;
+  top: 1rem;
+  right: 1.25rem;
+  z-index: 10;
+  font-size: 0.9rem;
+}
+
+.login-lang-switcher .login-lang-link {
+  color: #555;
+  text-decoration: none;
+  margin: 0 0.15rem;
+}
+
+.login-lang-switcher .login-lang-link.active,
+.login-lang-switcher .login-lang-link:hover {
+  color: #0d6efd;
+  font-weight: 600;
+}
+
+.login-lang-switcher .login-lang-sep {
+  color: #bbb;
+  margin: 0 0.1rem;
+}
+
+.custom-nav-dropdown-item.active {
+  color: #fd7e14;
+}
+
 .tableAddButton {
     padding-top: 4px;
 }

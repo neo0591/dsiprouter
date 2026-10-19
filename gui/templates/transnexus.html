@@ -1,6 +1,6 @@
 {% extends 'fullwidth_layout.html' %}
 
-{% block title %}TransNexus Configuration{% endblock %}
+{% block title %}{{ _('TransNexus Configuration') }}{% endblock %}
 
 {% block custom_css %}
 {% endblock %}
@@ -11,7 +11,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
       <div>
-        <h4>TransNexus Settings</h4>
+        <h4>{{ _('TransNexus Settings') }}</h4>
         <button name='save' id='save' class='btn btn-success btn-md' data-title="Add" data-bs-toggle="modal"
                 data-bs-target="#add">Save
         </button>

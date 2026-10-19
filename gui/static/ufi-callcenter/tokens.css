@@ -1,0 +1,171 @@
+/* ============================================================================
+   UFI Call Center Console — Design Tokens
+   Inherits the dSIPRouter / Cyber Blueprint identity (dark chrome + amber accent)
+   Adds call-centre semantics: agent states, ACD tiers, route layers, effects
+   ========================================================================= */
+
+:root {
+  /* ---------- Brand / Chrome (inherited from dSIPRouter) ---------- */
+  --dsip-nav:#222;            /* navbar background */
+  --dsip-nav-hover:#333;
+  --dsip-side:#404040;        /* sidebar background */
+  --dsip-side-line:#4b4a5e;
+  --dsip-accent:#F0AD4E;      /* amber — selected / active */
+  --dsip-accent-soft:#FFB266;
+  --dsip-link:#c4c4c5;
+  --dsip-link-dim:#9d9d9d;
+  --dsip-blue:#2188B0;
+  --dsip-orange:#fd7e14;
+  --dsip-orange-dark:#e66a00;
+
+  /* ---------- Semantic status ---------- */
+  --st-ok:#2f9e44;
+  --st-ok-bg:#ebfbee;
+  --st-ok-line:#b2f2bb;
+
+  --st-warn:#e8590c;
+  --st-warn-bg:#fff4e6;
+  --st-warn-line:#ffd8a8;
+
+  --st-err:#e03131;
+  --st-err-bg:#fff5f5;
+  --st-err-line:#ffc9c9;
+
+  --st-idle:#868e96;
+  --st-idle-bg:#f1f3f5;
+  --st-idle-line:#dee2e6;
+
+  --st-info:#2188B0;
+  --st-info-bg:#e3f2f8;
+  --st-info-line:#b8dced;
+
+  --st-purple:#7048e8;
+  --st-purple-bg:#f0ebff;
+  --st-purple-line:#d5c8ff;
+
+  /* ---------- Data plane (light) ---------- */
+  --bg-app:#f4f6f9;
+  --bg-surface:#fff;
+  --bg-sunken:#f8f9fb;
+  --bg-hover:#fffbf2;
+  --bg-selected:#fff6e6;
+
+  --line:#e3e6ea;
+  --line-strong:#ced4da;
+
+  --tx-1:#1a1d21;
+  --tx-2:#495057;
+  --tx-3:#868e96;
+  --tx-inv:#fff;
+
+  /* ---------- Agent states (ACD) ---------- */
+  --ag-idle:#2f9e44;        /* 示闲 */
+  --ag-busy:#e03131;        /* 通话中 */
+  --ag-wrap:#e8590c;        /* 小休 */
+  --ag-na:#adb5bd;          /* 示忙 */
+  --ag-off:#495057;         /* 离线 */
+  --ag-ring:#2188B0;       /* 振铃 */
+
+  /* ---------- Call result / ACD outcome ---------- */
+  --rs-ok:#2f9e44;
+  --rs-noans:#f08c00;       /* 486 / 无应答 */
+  --rs-busy:#e8590c;        /* 忙 */
+  --rs-reject:#e03131;      /* 拒接 */
+  --rs-abandon:#7048e8;     /* 排队放弃 */
+
+  /* ---------- Route layer accents ---------- */
+  --ly-mobile:#7048e8;      /* 手机 */
+  --ly-ufi:#F0AD4E;         /* UFI 设备 */
+  --ly-ksr:#2188B0;         /* Kamailio / dSIPRouter */
+  --ly-vos:#fd7e14;         /* VOS3000 */
+  --ly-agent:#2f9e44;       /* 坐席 */
+
+  /* ---------- Effect levels (生效机制三级) ---------- */
+  --ef-live:#2f9e44;        /* 即时 */
+  --ef-reload:#e8590c;      /* 需 reload */
+  --ef-restart:#e03131;     /* 需重启 */
+
+  /* ---------- Signal / band ramp ---------- */
+  --sig-0:#ced4da;
+  --sig-1:#e03131;
+  --sig-2:#f08c00;
+  --sig-3:#74b816;
+  --sig-4:#2f9e44;
+
+  --net-5g:#7048e8;
+  --net-4g:#1971c2;
+  --net-3g:#0c8599;
+  --net-wifi:#2f9e44;
+  --net-none:#adb5bd;
+
+  /* ---------- Typography ---------- */
+  --ff-ui:"Inter","PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+  --ff-num:"JetBrains Mono","SF Mono","Cascadia Mono",Consolas,monospace;
+
+  --fs-2xs:10px;
+  --fs-xs:11px;
+  --fs-sm:12px;
+  --fs-md:13px;
+  --fs-lg:15px;
+  --fs-xl:18px;
+  --fs-2xl:22px;
+  --fs-3xl:28px;
+
+  --fw-reg:400;
+  --fw-med:500;
+  --fw-semi:600;
+  --fw-bold:700;
+
+  /* ---------- Spacing ---------- */
+  --sp-1:4px;
+  --sp-2:8px;
+  --sp-3:12px;
+  --sp-4:16px;
+  --sp-5:20px;
+  --sp-6:24px;
+  --sp-8:32px;
+  --sp-10:40px;
+  --sp-12:48px;
+
+  /* ---------- Radius ---------- */
+  --r-xs:3px;
+  --r-sm:4px;
+  --r-md:6px;
+  --r-lg:8px;
+  --r-pill:999px;
+
+  /* ---------- Elevation ---------- */
+  --sh-xs:0 1px 2px rgba(16,24,40,.04);
+  --sh-sm:0 1px 3px rgba(16,24,40,.08),0 1px 2px rgba(16,24,40,.04);
+  --sh-md:0 4px 10px -2px rgba(16,24,40,.10),0 2px 4px -2px rgba(16,24,40,.06);
+  --sh-lg:0 16px 32px -8px rgba(16,24,40,.18),0 4px 10px -4px rgba(16,24,40,.08);
+  --sh-focus:0 0 0 3px rgba(33,136,176,.22);
+  --sh-amber:0 0 0 3px rgba(240,173,78,.28);
+
+  /* ---------- Layout ---------- */
+  --w-side:222px;
+  --w-side-collapsed:56px;
+  --h-nav:48px;
+  --h-toolbar:52px;
+  --h-row:44px;
+
+  /* ---------- Motion ---------- */
+  --mo-fast:120ms cubic-bezier(.4,0,.2,1);
+  --mo-base:200ms cubic-bezier(.4,0,.2,1);
+  --mo-slow:320ms cubic-bezier(.16,1,.3,1);
+
+  --z-sticky:20;
+  --z-drop:60;
+  --z-drawer:70;
+  --z-toast:90;
+  --z-modal:100;
+}
+
+@media (prefers-reduced-motion:reduce) {
+  *,*::before,*::after {
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+}

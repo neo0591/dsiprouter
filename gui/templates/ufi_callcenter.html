@@ -1,0 +1,519 @@
+{% extends 'fullwidth_layout.html' %}
+
+{% block title %}{{ _('UFI Call Console') }}{% endblock %}
+
+{% block custom_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='ufi-callcenter/tokens.css') }}?v={{ staticAssetVersion('ufi-callcenter/tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ufi-callcenter/app.css') }}?v={{ staticAssetVersion('ufi-callcenter/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ufi-callcenter/embed.css') }}?v={{ staticAssetVersion('ufi-callcenter/embed.css') }}">
+{% endblock %}
+
+{% block body %}
+<div class="ufi-callcenter shell" id="shell">
+
+  <!-- ══════════ 横向 TAB 导航（嵌在 dSIPRouter 主框架内） ══════════ -->
+  <nav class="ufi-view-tabs" aria-label="通信管理视图">
+    <button type="button" class="ufi-tab navitem is-active" data-v="topo" data-menu="biz.call.topo">线路总览</button>
+    <button type="button" class="ufi-tab navitem" data-v="pool" data-menu="biz.call.pool">UFI 通信配置 <span class="tab-count" id="cntPool">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="calls" data-menu="biz.call.calls">通话记录 <span class="tab-count" id="cntCalls">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="route" data-menu="biz.call.route">号码与路由 <span class="tab-count" id="cntDid">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="diag" data-menu="biz.call.diag">链路诊断 <span class="tab-count hot" id="cntFault" style="display:none">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="pend" data-menu="biz.call.pend">变更任务 <span class="tab-count" id="cntPend">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="sys" data-menu="biz.call.sys">对接参数</button>
+    <div class="ufi-view-tabs__meta">
+      <span class="cc-crumb"><b id="crumbTitle">线路总览</b><span class="sub" id="crumbSub">手机 → UFI → dSIPRouter → VOS3000 → 坐席</span></span>
+      <button class="pill clickable" id="pillKsr" title="dSIPRouter 106.75.29.22 · 我方自建">
+        <span class="dot ok"></span>dSIPRouter <b id="pillKsrN">—</b>
+      </button>
+      <button class="pill clickable" id="pillVos" title="VOS3000 8.136.109.38 · 客户资产">
+        <span class="dot ok"></span>VOS3000 <b id="pillVosN">—</b>
+      </button>
+      <button type="button" class="btn btn--sm nav-btn" id="btnPause" title="暂停/继续实时刷新"><span id="icoPause"></span><span id="txtPause">暂停</span></button>
+      <button type="button" class="btn btn--sm nav-btn" id="btnOurWork" title="我方待执行（仅限自建 dSIPRouter）"><span data-i="bolt"></span>我方待办<span class="cnt" id="ourCnt">0</span></button>
+      <button type="button" class="btn btn--sm nav-btn primary" id="btnPending" title="待客户在 VOS/FS 界面配置"><span data-i="clipboard"></span>客户待配<span class="cnt" id="pendCnt">0</span></button>
+      <span class="cc-clock"><span class="clock" id="clock">--:--:--</span></span>
+    </div>
+  </nav>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <main class="main scroll" id="main">
+
+    <!-- ─────────── 1. 线路总览 ─────────── -->
+    <section class="view active" id="v-topo">
+      <div class="view-head">
+        <div class="t">
+          <h2>线路总览</h2>
+          <p>UFI 作为并发线路接入 VOS3000 的全链路健康度。<b>dSIPRouter 为我方自建可操作，VOS3000 及坐席为客户资产、我方只出方案与指引单</b>。桥接 INVITE 采用对称方言：<b>R-URI = IMEI</b>、<b>X-VOLTE = 真实号码</b>。</p>
+        </div>
+        <div class="acts">
+          <button class="btn" data-act="refresh"><span data-i="refresh"></span>刷新</button>
+          <button class="btn primary" data-act="go-pending"><span data-i="list"></span>待生效变更</button>
+        </div>
+      </div>
+
+      <div class="kpis" id="kpiTopo"></div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="network"></span>端到端链路</h3>
+          <span class="hint">箭头标注协议方向；标签为该段的注册数 / 并发数 / 失败数</span>
+          <div class="acts"><button class="btn sm" data-act="diag-invite"><span data-i="terminal"></span>抓 INVITE 看三值</button></div>
+        </div>
+        <div class="panel-body flush">
+          <div class="topo"><div class="topo-flow" id="topoFlow"></div></div>
+          <div class="topo-legend" id="topoLegend"></div>
+        </div>
+      </div>
+
+      <div class="grid-side">
+        <div class="panel">
+          <div class="panel-head">
+            <h3><span data-i="pulse"></span>实时通话流</h3>
+            <div class="acts"><span class="hint">每 10s 同步设备上报记录</span></div>
+          </div>
+          <div class="panel-body"><div class="callflow-live" id="callflowLive"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span data-i="chart"></span>池负载分布</h3></div>
+          <div class="panel-body" id="poolLoad"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────── 2. UFI 线路池 ─────────── -->
+    <section class="view" id="v-pool">
+      <div class="view-head">
+        <div class="t">
+          <h2>UFI 通信配置</h2>
+          <p>按 IMEI 关联通信配置：池归属、选路策略、并发上限。</p>
+        </div>
+        <div class="acts">
+          <span class="tag ok" id="linkTag">台账联动中</span>
+          <button class="btn" data-act="pool-fallback"><span data-i="shield"></span>兜底策略</button>
+          <button class="btn" data-act="pool-patches"><span data-i="sliders"></span>cfg 补丁</button>
+          <button class="btn primary" data-act="wizard"><span data-i="plus"></span>新增通信配置</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="route"></span>选路现状（真实数据）</h3>
+          <div class="acts"><span class="tag" id="routeRealTag">—</span></div>
+        </div>
+        <div class="panel-body">
+          <div class="note"><span class="ni" data-i="info"></span><div class="nb"><b>现网机制</b>呼入 = dr_rules 按 IMEI 前缀匹配 → 运营商组 gwlist（同步引擎自动维护，failover 由 VOS 承担）；呼出 = 注册桥接。池归属 / 权重 / 并发上限在下方台账逐台配置，保存即同步 reload。</div></div>
+          <div id="routeReal" style="margin-top:14px"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="sim"></span>通信配置与设备台账</h3>
+          <span class="hint">左半区为设备属性（只读，来自 UFI 管理模块）；右半区为通信属性（本模块维护，写 dsip_ufi_pool）</span>
+        </div>
+        <div class="toolbar">
+          <div class="imei-pick" id="imeiPick">
+            <div class="searchbox"><span data-i="search"></span>
+              <input class="inp" id="poolSearch" autocomplete="off" placeholder="IMEI 片段 / SIM / 型号；回车过滤，↓ 选中">
+            </div>
+            <div class="imei-drop" id="imeiDrop"></div>
+          </div>
+          <select class="sel sel-filter" id="poolFilterPool">
+            <option value="">全部池</option>
+            <option value="P1">P1 主用池</option>
+            <option value="P2">P2 夜间池</option>
+            <option value="P3">P3 外呼营销池</option>
+            <option value="—">未入池</option>
+          </select>
+          <select class="sel sel-filter" id="poolFilterState">
+            <option value="">全部状态</option>
+            <option value="online">在线</option>
+            <option value="registered">已注册</option>
+            <option value="offline">离线</option>
+            <option value="busy">有并发</option>
+            <option value="idle">空闲</option>
+          </select>
+          <select class="sel sel-filter" id="poolFilterNet">
+            <option value="">全部网络</option>
+            <option>5G SA</option><option>5G NSA</option><option>LTE</option><option>HSPA+</option><option>WIFI</option>
+          </select>
+          <div class="bulkbar" id="poolBulk">
+            <span>已选 <b id="poolSelN">0</b> 台</span>
+            <div class="acts">
+              <button class="btn sm" data-bulk="enable">启用入池</button>
+              <button class="btn sm" data-bulk="disable">停用</button>
+              <button class="btn sm" data-bulk="maintain">进维护</button>
+              <button class="btn sm" data-bulk="reset-conc">清零并发</button>
+            </div>
+          </div>
+          <span class="tb-count" id="poolCount"></span>
+        </div>
+        <div class="panel-body flush">
+          <div class="tablewrap">
+            <table class="grid" id="poolTable">
+              <thead>
+                <tr id="poolHead"></tr>
+                <tr id="poolSub"></tr>
+              </thead>
+              <tbody id="poolBody"></tbody>
+            </table>
+          </div>
+          <div class="pager" id="poolPager"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────── 2b. 通话记录 ─────────── -->
+    <section class="view" id="v-calls">
+      <div class="view-head">
+        <div class="t">
+          <h2>通话记录</h2>
+          <p>设备上报通话经语义聚合后的明细；支持按 IMEI、运营商组、时间区间、呼叫结果与呼叫类型筛选，点击行查看三侧过程日志。</p>
+        </div>
+        <div class="acts">
+          <button class="btn" data-act="calls-refresh"><span data-i="refresh"></span>刷新</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="phone-out"></span>通话明细</h3>
+          <span class="hint" id="callsHint">按开始时间倒序</span>
+        </div>
+        <div class="toolbar" id="callsToolbar">
+          <div class="searchbox"><span data-i="search"></span>
+            <input class="inp" id="callsImei" autocomplete="off" placeholder="IMEI 片段">
+          </div>
+          <select class="sel sel-filter" id="callsCarrier" title="运营商组">
+            <option value="">全部运营商组</option>
+          </select>
+          <input class="inp" id="callsFrom" type="date" title="开始日期" aria-label="开始日期" style="max-width:145px">
+          <span style="flex:none;color:var(--tx-3)">~</span>
+          <input class="inp" id="callsTo" type="date" title="结束日期" aria-label="结束日期" style="max-width:145px">
+          <select class="sel sel-filter" id="callsResult" title="呼叫结果">
+            <option value="">全部结果</option>
+            <option value="answered">接通</option>
+            <option value="rejected">拒接</option>
+            <option value="failed">失败</option>
+            <option value="unanswered">未接通</option>
+          </select>
+          <select class="sel sel-filter" id="callsDir" title="呼叫类型">
+            <option value="">全部类型</option>
+            <option value="out">呼出</option>
+            <option value="in">呼入</option>
+          </select>
+          <button class="btn sm" id="callsClear" type="button" title="清空筛选">清空</button>
+          <span class="tb-count" id="callsCount"></span>
+        </div>
+        <div class="panel-body flush">
+          <div class="tablewrap">
+            <table class="grid" id="callsTable">
+              <thead>
+                <tr>
+                  <th style="width:160px">时间</th>
+                  <th style="width:72px">类型</th>
+                  <th style="width:120px">对端</th>
+                  <th style="width:150px">IMEI</th>
+                  <th style="width:100px">运营商组</th>
+                  <th style="width:72px">池</th>
+                  <th style="width:88px">结果</th>
+                  <th style="width:72px" class="num">时长</th>
+                  <th>详情</th>
+                </tr>
+              </thead>
+              <tbody id="callsBody"></tbody>
+            </table>
+          </div>
+          <div class="pager" id="callsPager"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────── 3. 号码与路由（一期 §5.1 DID/路由模块） ─────────── -->
+    <section class="view" id="v-route">
+      <div class="view-head">
+        <div class="t">
+          <h2>号码与路由</h2>
+          <p><b>呼入不绑主叫</b>：任意外线拨 UFI SIM 即可呼入。<b>外呼被叫</b>走 VOS「网关前缀」通配（生产一次性配置 <code>1,0,400,800</code>），<b>不要</b>每加一个被叫就改 VOS。</p>
+        </div>
+        <div class="acts">
+          <button class="btn" data-act="gen-guide" data-guide="vos_prefix"><span data-i="file"></span>外呼前缀通配指引</button>
+          <button class="btn" data-act="guide-all"><span data-i="clipboard"></span>生成客户指引单</button>
+          <button class="btn primary" data-act="in-dids-edit"><span data-i="plus"></span>新增号码绑定</button>
+        </div>
+      </div>
+
+      <div class="kpis" id="kpiRoute"></div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="alert"></span>生产外呼策略（重要）</h3>
+          <span class="tag warn">客户 VOS 一次性</span>
+        </div>
+        <div class="panel-body">
+          <div class="note warn" style="margin:0"><span class="ni" data-i="alert"></span><div class="nb">
+            <b>错误做法</b>：在 <code>dsip接入</code> 网关前缀里逐个追加 11 位被叫 → 每加一个号就「无可用路由」。<br>
+            <b>正确做法</b>：网关前缀改为通配 <code>1,0,400,800</code>（手机 / 区号座机 / 400 / 800），保存并重载一次。之后任意被叫、新增 UFI，都不必再改号段。<br>
+            点上方「外呼前缀通配指引」可生成交付客户的操作单。
+          </div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="route"></span>号码绑定（dbaliases）</h3>
+          <span class="hint">UFI SIM/IMEI = 呼入入口（主叫不限）· 其他号码 = 外呼指定线路绑定 · alias_username → username</span>
+          <div class="acts"><span class="tag ok">我方可执行</span></div>
+        </div>
+        <div class="panel-body flush"><table class="grid" id="didTable"><thead><tr>
+          <th>号码（呼入入口 = UFI SIM）</th><th>性质</th><th>映射到 UFI</th><th>落地</th><th>所属池</th><th class="col-act">操作</th>
+        </tr></thead><tbody id="didBody"></tbody></table></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="phone-out"></span>呼出号段规则（池侧参考）</h3>
+          <span class="hint">dSIPRouter 池按前缀选路；VOS 侧须已用通配前缀放行被叫</span>
+          <div class="acts"><span class="tag warn">客户 VOS 侧配置</span>
+            <button class="btn sm" data-act="gen-guide" data-guide="vos_prefix"><span data-i="file"></span>生成通配指引</button></div>
+        </div>
+        <div class="panel-body flush"><table class="grid" id="ruleTable"><thead><tr>
+          <th>规则</th><th>号段</th><th>使用池</th><th>授权</th><th class="num">最大重试</th><th class="num">重试间隔</th><th>状态</th><th class="col-act">操作</th>
+        </tr></thead><tbody id="ruleBody"></tbody></table></div>
+      </div>
+
+      <div class="grid-side">
+        <div class="panel">
+          <div class="panel-head"><h3><span data-i="pulse"></span>加一台 UFI 的号码动作</h3><span class="hint">呼入才改 DIDs；外呼号段只配一次</span></div>
+          <div class="panel-body">
+            <div class="flow">
+              <div class="flow-node"><div class="fn-hd"><span class="n">1</span><b>我方写 dbaliases</b><span class="tag ok">即时</span></div>
+                <div class="fn-body" style="grid-template-columns:1fr"><div><div class="v" style="font-family:var(--ff-ui)">把 SIM 号映射到该 UFI 的 IMEI（外呼指定线路 / 可选）。</div></div></div></div>
+              <div class="flow-node"><div class="fn-hd"><span class="n">2</span><b>客户在话机追加 DIDs</b><span class="tag warn">客户操作</span></div>
+                <div class="fn-body" style="grid-template-columns:1fr"><div><div class="v" style="font-family:var(--ff-ui)">话机 1002 的 DIDs 追加 <span class="mono">SIM, IMEI</span>（仅呼入振铃需要；不要把外呼被叫客户手机号加进 DIDs）。</div></div></div></div>
+              <div class="flow-node"><div class="fn-hd"><span class="n">3</span><b>外呼前缀（仅首次）</b><span class="tag warn">客户操作</span></div>
+                <div class="fn-body" style="grid-template-columns:1fr"><div><div class="v" style="font-family:var(--ff-ui)">确认 <code>dsip接入</code> 网关前缀已是 <span class="mono">1,0,400,800</span>。若已是通配，本步跳过——<b>不要</b>再追加单个 SIM / 被叫。</div></div></div></div>
+            </div>
+            <div class="note warn" style="margin-top:12px"><span class="ni" data-i="alert"></span><div class="nb"><b>VOS 铁律</b>保存后必须重载话务配置；验收先看 CDR 终止原因。</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span data-i="clipboard"></span>客户侧现状快照</h3><span class="tag warn">只读</span></div>
+          <div class="panel-body">
+            <dl class="spec">
+              <dt>话机</dt><dd>1002（id=2003）</dd>
+              <dt>DIDs</dt><dd id="snapDids"></dd>
+              <dt>接入网关</dt><dd>dsip接入（ID 1001）</dd>
+              <dt>认证方式</dt><dd>IP 认证 → 106.75.29.22</dd>
+              <dt>呼出号段（现状）</dt><dd id="snapPrefix"></dd>
+              <dt>生产推荐</dt><dd class="mono">1,0,400,800</dd>
+            </dl>
+            <button class="btn" data-act="gen-guide" data-guide="vos_prefix" style="margin-top:12px">
+              <span data-i="file"></span>生成外呼前缀通配指引
+            </button>
+            <button class="btn primary" data-act="gen-guide" data-guide="vos_dids" style="margin-top:8px">
+              <span data-i="file"></span>生成话机 DIDs 指引单
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────── 4. 链路诊断 ─────────── -->
+    <section class="view" id="v-diag">
+      <div class="view-head">
+        <div class="t">
+          <h2>链路诊断</h2>
+          <p>分段验证法：UFI 注册 → 呼入落地 → 坐席就绪 → kami 日志。前三段中我方只能自查 dSIPRouter 与观察落地结果，VOS 侧明细需客户回传。抓一条 INVITE 看 <b>R-URI / X-VOLTE / To</b> 三值是否落在正确位置。</p>
+        </div>
+        <div class="acts">
+          <button class="btn" data-act="diag-probe"><span data-i="play"></span>跑分段探针</button>
+          <button class="btn primary" data-act="diag-invite2"><span data-i="terminal"></span>解析 INVITE</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="stethoscope"></span>分段探针</h3>
+          <span class="hint">四段独立校验，任一失败即定位到层</span>
+          <div class="acts"><button class="btn sm" data-act="diag-probe">重新跑</button></div>
+        </div>
+        <div class="panel-body"><div class="probe-list" id="probeList"></div></div>
+      </div>
+
+      <div class="grid-side">
+        <div class="panel">
+          <div class="panel-head">
+            <h3><span data-i="terminal"></span>INVITE 三值</h3>
+            <span class="hint">UFI 方言：R-URI=IMEI，X-VOLTE=真实号码</span>
+            <div class="acts"><button class="btn sm" data-act="diag-invite2">换一条</button></div>
+          </div>
+          <div class="panel-body" id="invitePane"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span data-i="server"></span>三层探活</h3></div>
+          <div class="panel-body" id="probeLive"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="inbox"></span>排障速查</h3>
+          <span class="hint">按责任域分组：我方可自查自修 / 需客户核实</span>
+        </div>
+        <div class="panel-body" id="troubleBox"></div>
+      </div>
+    </section>
+
+    <!-- ─────────── 5. 变更任务（双责任域） ─────────── -->
+    <section class="view" id="v-pend">
+      <div class="view-head">
+        <div class="t">
+          <h2>变更任务</h2>
+          <p>VOS3000 属客户资产，我方<b>不执行任何写操作</b>，只生成配置指引单并跟踪验收；dSIPRouter 为我方自建，可直接执行。</p>
+        </div>
+        <div class="acts">
+          <button class="btn" data-act="backup"><span data-i="save"></span>备份我方配置</button>
+          <button class="btn" data-act="rollback"><span data-i="refresh"></span>回滚我方配置</button>
+          <button class="btn" data-act="apply-all"><span data-i="play"></span>执行我方待办</button>
+        </div>
+      </div>
+
+      <div class="owner-split">
+        <div class="os-card ours">
+          <div class="os-hd">
+            <span class="os-ico" data-i="server"></span>
+            <div>
+              <b>dSIPRouter</b>
+              <span class="os-sub">106.75.29.22 · 我方自建</span>
+            </div>
+            <span class="tag ok">我方可执行</span>
+          </div>
+          <div class="os-body">
+            <p>自建服务器，我方持有 SSH 与数据库权限。通信属性（dsip_ufi_pool）已由本模块直接落库；开户 / dbaliases 等脚本操作进入待办跟踪。</p>
+            <div class="os-sys">subscriber · dbaliases · dsip_ufi_pool · address · kamailio.cfg</div>
+          </div>
+        </div>
+        <div class="os-card client">
+          <div class="os-hd">
+            <span class="os-ico" data-i="building"></span>
+            <div>
+              <b>VOS3000</b>
+              <span class="os-sub">8.136.109.38 · 客户资产</span>
+            </div>
+            <span class="tag warn">仅出指引单</span>
+          </div>
+          <div class="os-body">
+            <p>我方<b>无执行权限</b>，也不接触其数据库与配置文件。系统生成图文指引单，客户在自己的管理界面完成操作，回填后我方验证验收。</p>
+            <div class="os-sys">话机 DIDs · 接入网关号段 · IVR / ACD 队列 · 坐席状态 · 录音</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="clipboard"></span>待客户配置</h3>
+          <span class="hint">每条指引单含：操作位置 → 步骤 → 注意事项 → 验收方法</span>
+          <div class="acts">
+            <button class="btn sm" data-act="copy-all-guide"><span data-i="copy"></span>复制全部指引</button>
+          </div>
+        </div>
+        <div class="panel-body" id="clientTasks"></div>
+      </div>
+
+      <div class="grid3">
+        <div class="panel" style="margin:0">
+          <div class="panel-head"><h3><span data-i="bolt"></span>我方 · 即时</h3><span class="hint">写入即用</span></div>
+          <div class="panel-body" id="pendLive"></div>
+        </div>
+        <div class="panel" style="margin:0">
+          <div class="panel-head"><h3><span data-i="refresh"></span>我方 · reload</h3><span class="hint">权限/地址重载</span></div>
+          <div class="panel-body" id="pendReload"></div>
+        </div>
+        <div class="panel" style="margin:0">
+          <div class="panel-head"><h3><span data-i="power"></span>我方 · 重启</h3><span class="hint">kamailio</span></div>
+          <div class="panel-body" id="pendRestart"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="terminal"></span>我方执行日志</h3>
+          <div class="acts"><button class="btn sm" data-act="clear-log">清空</button></div>
+        </div>
+        <div class="panel-body"><div class="step-log" id="applyLog"><span class="dim"># 尚无执行记录。点「执行我方待办」开始。</span></div></div>
+      </div>
+    </section>
+
+    <!-- ─────────── 6. 对接参数 ─────────── -->
+    <section class="view" id="v-sys">
+      <div class="view-head">
+        <div class="t">
+          <h2>对接参数</h2>
+          <p>两机对接的存量参数快照。<b>dSIPRouter 为我方自建可修改</b>；VOS3000 属客户资产，此处仅作对客沟通时的核对基准，我方不执行写入。</p>
+        </div>
+        <div class="acts">
+          <button class="btn" data-act="gen-guide" data-guide="vos_agent"><span data-i="file"></span>生成验收指引</button>
+          <button class="btn primary" data-act="sys-save"><span data-i="save"></span>保存我方参数</button>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <div class="panel-head"><h3><span data-i="router"></span>dSIPRouter</h3><span class="tag ok">我方 · 可执行</span></div>
+          <div class="panel-body"><div id="sysKsr"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span data-i="building"></span>VOS3000</h3><span class="tag warn">客户 · 只读</span></div>
+          <div class="panel-body"><div id="sysVos"></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span data-i="sliders"></span>dSIPRouter cfg 补丁管理</h3>
+          <span class="hint">我方可改。kamailio 实际加载 <code>/etc/kamailio/kamailio.cfg</code>；安装目录模板已漂移，补丁必须打服务文件</span>
+        </div>
+        <div class="panel-body" id="patchBox"></div>
+      </div>
+    </section>
+
+
+  </main>
+</div>
+
+<!-- ══════════ OVERLAYS ══════════ -->
+<div class="drawer-mask" id="drawerMask"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-hd">
+    <div class="dh-t">
+      <h3 id="drawerTitle">—</h3>
+      <div class="dh-s" id="drawerSub"></div>
+    </div>
+    <div class="acts">
+      <button class="iconbtn" id="drawerClose" title="关闭"><span data-i="x"></span></button>
+    </div>
+  </div>
+  <div class="drawer-bd" id="drawerBody"></div>
+  <div class="drawer-ft" id="drawerFoot"></div>
+</aside>
+
+<div class="modal-mask" id="modalMask"></div>
+<div class="modal" id="modal" role="dialog">
+  <div class="modal-hd">
+    <h3 id="modalTitle">—</h3>
+    <div class="acts"><button class="iconbtn" id="modalClose"><span data-i="x"></span></button></div>
+  </div>
+  <div class="modal-bd" id="modalBody"></div>
+  <div class="modal-ft" id="modalFoot"></div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+{% endblock %}
+
+{% block custom_js %}
+  <script src="{{ url_for('static', filename='ufi-callcenter/icons.js') }}?v={{ staticAssetVersion('ufi-callcenter/icons.js') }}"></script>
+  <script src="{{ url_for('static', filename='ufi-callcenter/data.js') }}?v={{ staticAssetVersion('ufi-callcenter/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='ufi-callcenter/app.js') }}?v={{ staticAssetVersion('ufi-callcenter/app.js') }}"></script>
+{% endblock %}

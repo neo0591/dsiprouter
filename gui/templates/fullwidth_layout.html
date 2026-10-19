@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 {% from 'util.jinja2.html' import link_tag, script_tag, tracked_link, img_tag %}
-<html lang="en">
+<html lang="{{ CURRENT_LANGUAGE }}">
 
 <head>
 
@@ -38,7 +38,7 @@
                 {% set btn_class="btn-reload" %}
               {% endif %}
               <button type="button" class="btn {{ btn_class }} btn-sm dropdown-toggle" id="reload" data-bs-toggle="dropdown" aria-expanded="false">
-                Reload
+                {{ _('Reload') }}
               </button>
               <ul class="dropdown-menu">
                 {% if state.kam_reload_required == True %}
@@ -51,22 +51,29 @@
                 {% else %}
                   {% set dsip_reload_state="btn-secondary" %}
                 {% endif %}
-                <li><a class="dropdown-item custom-nav-dropdown-item {{ kam_reload_state }}" id="reload_kam" href="#">Reload Kamailio</a></li>
-                <li><a class="dropdown-item custom-nav-dropdown-item {{ dsip_reload_state }}" id="reload_dsip" href="#">Reload dSIPRouter</a></li>
+                <li><a class="dropdown-item custom-nav-dropdown-item {{ kam_reload_state }}" id="reload_kam" href="#">{{ _('Reload Kamailio') }}</a></li>
+                <li><a class="dropdown-item custom-nav-dropdown-item {{ dsip_reload_state }}" id="reload_dsip" href="#">{{ _('Reload dSIPRouter') }}</a></li>
               </ul>
             </div>
-            <!-- <form id="qform" class="navbar-form float-left" role="search">
-               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-               <input type="text" class="form-control" placeholder="Search" />
-             </form> -->
+            <li class="dropdown movable">
+              <a href="#" class="dropdown-toggle user-profile-button" data-bs-toggle="dropdown" title="{{ _('Language') }}">
+                <span class="ti ti-language"></span>{{ SUPPORTED_LANGUAGES.get(CURRENT_LANGUAGE, CURRENT_LANGUAGE) }}
+              </a>
+              <ul class="dropdown-menu" role="menu">
+                {% for code, label in SUPPORTED_LANGUAGES.items() %}
+                <li>
+                  <a class="dropdown-item custom-nav-dropdown-item{% if code == CURRENT_LANGUAGE %} active{% endif %}"
+                     href="{{ url_for('set_language', lang=code, next=request.full_path) }}">{{ label }}</a>
+                </li>
+                {% endfor %}
+              </ul>
+            </li>
             <li class="dropdown movable">
               <a href="#" class="dropdown-toggle user-profile-button" data-bs-toggle="dropdown"><span
                   class="ti ti-user"></span>{{ session.username }}</a>
               <ul class="dropdown-menu" role="menu">
-                <!-- <li><a href="#"><span class="fa fa-user"></span>My Profile</a></li>
-                <li><a href="#"><span class="fa fa-gear"></span>Settings</a></li> -->
                 <li class="divider"></li>
-                <li><a class="dropdown-item custom-nav-dropdown-item" href="/logout"><span class="ti ti-logout"></span>Logout</a></li>
+                <li><a class="dropdown-item custom-nav-dropdown-item" href="/logout"><span class="ti ti-logout"></span>{{ _('Logout') }}</a></li>
               </ul>
             </li>
           </ul>
@@ -75,103 +82,111 @@
 
       <aside id="side-menu" class="aside" role="navigation">
         <div class="side-menu-header">
-          <button id="side-menu-collapse-toggle" class="btn btn-link sidebar-collapse-btn" type="button" title="Toggle sidebar" aria-label="Toggle sidebar" aria-pressed="false">
+          <button id="side-menu-collapse-toggle" class="btn btn-link sidebar-collapse-btn" type="button" title="{{ _('Toggle sidebar') }}" aria-label="{{ _('Toggle sidebar') }}" aria-pressed="false">
             <i class="ti ti-layout-sidebar-left-collapse"></i>
           </button>
         </div>
         <ul class="nav nav-list accordion">
 
-          <li class="nav-header">
+          <li class="nav-header" data-menu="dashboard">
             <div class="link">
              <i class="ti ti-dashboard"></i>
-             <a class="navlink" href="/">Dashboard</a>
+             <a class="navlink" href="/">{{ _('Dashboard') }}</a>
             </div>
           </li>
 
-          <li class="nav-header{% if request.path in ['/settings', '/backupandrestore', '/certificates', '/teleblock', '/transnexus', '/stirshaken', '/licensing', '/upgrade'] %} open{% endif %}" id="system-settings-menu">
+          <li class="nav-header{% if request.path in ['/ufi', '/ufi-callcenter', '/ufi-sms'] %} open{% endif %}" data-menu="biz">
+            <div class="link">
+              <i class="ti ti-briefcase"></i>
+              <a class="navlink" href="/ufi">{{ _('Business Management') }}</a>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+            <ul class="submenu"{% if request.path in ['/ufi', '/ufi-callcenter', '/ufi-sms'] %} style="display:block"{% endif %}>
+              <li data-menu="biz.ufi"><a class="navlink" href="/ufi">{{ _('UFI Devices') }}</a></li>
+              <li data-menu="biz.call"><a class="navlink" href="/ufi-callcenter">通信管理</a></li>
+              <li data-menu="biz.sms"><a class="navlink" href="/ufi-sms">短信中心</a></li>
+            </ul>
+          </li>
+
+          <li class="nav-header" data-menu="carriers">
             <div class="link">
               <i class="ti ti-layout-grid"></i>
-              <a class="navlink" href="/carriergroups">Carrier Groups</a>
-              
+              <a class="navlink" href="/carriergroups">{{ _('Carrier Groups') }}</a>
             </div>
           </li>
 
-          <li class="nav-header">
+          <li class="nav-header" data-menu="endpoints">
             <div class="link">
               <i class="ti ti-road"></i>
-              <a class="navlink" href="/endpointgroups">Endpoint Groups</a>
+              <a class="navlink" href="/endpointgroups">{{ _('Endpoint Groups') }}</a>
               
             </div>
           </li>
 
-          <li class="nav-header">
+          <li class="nav-header" data-menu="domains">
             <div class="link">
               <i class="ti ti-world"></i>
-              <a class="navlink" href="/domains">Domains</a>
+              <a class="navlink" href="/domains">{{ _('Domains') }}</a>
               
             </div>
           </li>
 
-          <li class="nav-header">
+          <li class="nav-header" data-menu="inbound">
             <div class="link">
              <i class="ti ti-arrow-left"></i>
-              <a class="navlink" href="/inboundmapping">Inbound Routes</a>
+              <a class="navlink" href="/inboundmapping">{{ _('Inbound Routes') }}</a>
             </div>
           </li>
 
-          <li class="nav-header">
+          <li class="nav-header" data-menu="outbound">
             <div class="link">
               <i class="ti ti-arrow-right"></i>
-              <a class="navlink" href="/outboundroutes">Outbound Routes</a>
+              <a class="navlink" href="/outboundroutes">{{ _('Outbound Routes') }}</a>
             </div>
           </li>
-          <!--
-          <li class="nav-header">
-            <div class="link">
-              <i class="fa fa-lg fa-file-image-o"></i>
-              <a class="navlink" href="/numberenrichment">Number Enrichment</a>
-              <i class="fa fa-chevron-down"></i>
-            </div>
-          </li>
-          -->
-          <li class="nav-header">
+          <li class="nav-header" data-menu="cdrs">
             <div class="link">
               <i class="ti ti-list-details"></i>
-              <a class="navlink" href="/cdrs">Call Detail Records</a>
+              <a class="navlink" href="/cdrs">{{ _('Call Detail Records') }}</a>
               
+            </div>
+          </li>
+
+          <li class="nav-header{% if request.path.startswith('/help') %} open selected-menu-item{% endif %}" data-menu="help">
+            <div class="link">
+              <i class="ti ti-help"></i>
+              <a class="navlink" href="/help">帮助中心</a>
             </div>
           </li>
           <!-- Load Dynamic Modules -->
           {% for module_name, module_details in dynamicModules.items() %}
-          <li class="nav-header">
+          <li class="nav-header" data-menu="{{ module_name }}">
             <div class="link">
               <i class="{{ module_details['menu_icon'] }}"></i>
-              <a class="navlink" href="/gui/{{ module_name }}">{{ module_details['menu_name'] }}</a>
+              <a class="navlink" href="/gui/{{ module_name }}">{{ _(module_details['menu_name']) }}</a>
               
             </div>
           </li>
           {% endfor %}
           
 
-          <li class="nav-header">
+          <li class="nav-header" data-menu="sys">
             <div class="link">
            
               <i class="ti ti-settings"></i>
-              <a class="navlink" href="#">System Settings</a>
+              <a class="navlink" href="#">{{ _('System Settings') }}</a>
               <i class="ti ti-chevron-down"></i>
             </div>
-            <ul class="submenu"{% if request.path in ['/settings', '/backupandrestore', '/certificates', '/teleblock', '/transnexus', '/stirshaken', '/licensing', '/upgrade'] %} style="display:block"{% endif %}>
-              <li><a class="navlink" href="/settings">Global Settings</a></li>
-              {% if 'dsip_admin' in user_groups %}
-              <li><a class="navlink" href="/users">Users</a></li>
-              {% endif %}
-              <li><a href="/backupandrestore">Backup and Restore</a></li>
-              <li><a href="/certificates">Certificates</a></li>
-              <li><a href="/teleblock">Teleblock</a></li>
-              <li><a href="/transnexus">TransNexus</a></li>
-              <li><a href="/stirshaken">STIR/SHAKEN</a></li>
-              <li><a href="/licensing">License Manager</a></li>
-              <li><a href="/upgrade">Upgrade</a></li>
+            <ul class="submenu"{% if request.path in ['/settings', '/users', '/backupandrestore', '/certificates', '/teleblock', '/transnexus', '/stirshaken', '/licensing', '/upgrade'] %} style="display:block"{% endif %}>
+              <li data-menu="sys.settings"><a class="navlink" href="/settings">{{ _('Global Settings') }}</a></li>
+              <li data-menu="sys.users"><a class="navlink" href="/users">客户与权限</a></li>
+              <li data-menu="sys.backup"><a href="/backupandrestore">{{ _('Backup and Restore') }}</a></li>
+              <li data-menu="sys.certs"><a href="/certificates">{{ _('Certificates') }}</a></li>
+              <li data-menu="sys.teleblock"><a href="/teleblock">{{ _('Teleblock') }}</a></li>
+              <li data-menu="sys.transnexus"><a href="/transnexus">{{ _('TransNexus') }}</a></li>
+              <li data-menu="sys.stir"><a href="/stirshaken">{{ _('STIR/SHAKEN') }}</a></li>
+              <li data-menu="sys.license"><a href="/licensing">{{ _('License Manager') }}</a></li>
+              <li data-menu="sys.upgrade"><a href="/upgrade">{{ _('Upgrade') }}</a></li>
             </ul>
           </li>
 
@@ -203,20 +218,38 @@
   {{ script_tag('jquery') }}
   <script type="application/javascript">
     /* globals set in window properties */
+    /* same-origin URLs: location.host keeps non-standard ports on direct access,
+       and drops the port behind reverse proxies (WAF/nginx) serving on 443/80 */
     Object.defineProperty(window, "GUI_BASE_URL", {
       configurable: false,
       writable: false,
-      value: "{{ settings.DSIP_PROTO }}" + "://" + window.location.hostname + ":" + "{{ settings.DSIP_PORT }}" + "/"
+      value: window.location.protocol + "//" + window.location.host + "/"
     });
     Object.defineProperty(window, "API_BASE_URL", {
       configurable: false,
       writable: false,
-      value: "{{ settings.DSIP_API_PROTO }}" + "://" + window.location.hostname + ":" + "{{ settings.DSIP_API_PORT }}" + "/api/v1/"
+      value: window.location.protocol + "//" + window.location.host + "/api/v1/"
     });
+    window.MENU_PERMS = {{ (menu_perms or [])|tojson }};
+    window.IS_PLATFORM_ADMIN = {{ 1 if is_platform_admin else 0 }};
+    window.CUSTOMER_NAME = {{ (customer_name or '')|tojson }};
+    (function () {
+      function allowed(key) {
+        if (window.IS_PLATFORM_ADMIN) return true;
+        var ps = window.MENU_PERMS || [];
+        if (ps.indexOf(key) >= 0) return true;
+        var pre = key + '.';
+        for (var i = 0; i < ps.length; i++) if (ps[i].indexOf(pre) === 0) return true;
+        return false;
+      }
+      document.querySelectorAll('[data-menu]').forEach(function (el) {
+        if (!allowed(el.getAttribute('data-menu'))) el.style.display = 'none';
+      });
+    })();
     Object.defineProperty(window, "CUSTOM_MODULE_API_BASE_URL", {
       configurable: false,
       writable: false,
-      value: "{{ settings.DSIP_API_PROTO }}" + "://" + window.location.hostname + ":" + "{{ settings.DSIP_API_PORT }}" + "/api/"
+      value: window.location.protocol + "//" + window.location.host + "/api/"
     });
   </script>
   {{ script_tag('util') }}

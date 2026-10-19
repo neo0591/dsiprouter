@@ -1,0 +1,18 @@
+.ufi-sim-picker {
+  max-height: 160px;
+  overflow: auto;
+  margin-top: 8px;
+  border: 1px solid #eee;
+  padding: 8px;
+}
+
+.ufi-sim-picker label {
+  display: block;
+  font-weight: normal;
+  margin: 0 0 4px 0;
+}
+
+#edit_dids,
+#append_dids {
+  font-family: monospace;
+}

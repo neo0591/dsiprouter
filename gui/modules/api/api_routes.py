@@ -4,7 +4,7 @@ import sys
 if sys.path[0] != '/etc/dsiprouter/gui':
     sys.path.insert(0, '/etc/dsiprouter/gui')
 
-import os, time, random, subprocess, requests, csv, base64, codecs, re, socket, json, urllib3
+import os, time, random, subprocess, requests, csv, base64, codecs, re, socket, json, urllib3, hashlib, io
 from contextlib import closing
 from datetime import datetime
 from flask import Blueprint, jsonify, request, send_file, g
@@ -2103,6 +2103,720 @@ def addEndpointGroups(data=None, endpointGroupType=None, domain=None):
         db.close()
 
 
+def _ufi_auth_domain():
+    return str(getattr(settings, 'EXTERNAL_IP_ADDR', '') or settings.DEFAULT_AUTH_DOMAIN).strip()
+
+
+def _ufi_password(imei):
+    return hashlib.md5(imei.encode('utf-8')).hexdigest()[:16]
+
+
+def _normalize_ufi_imei(value):
+    imei = re.sub(r'\s+', '', str(value or ''))
+    if not (imei.isdigit() and len(imei) >= 10):
+        raise http_exceptions.BadRequest('IMEI is invalid')
+    return imei
+
+
+def _normalize_ufi_sim(value, required=True):
+    sim = re.sub(r'\s+', '', str(value or ''))
+    if not sim:
+        if required:
+            raise http_exceptions.BadRequest('SIM is required')
+        return ''
+    if not (sim.isdigit() and len(sim) >= 8):
+        raise http_exceptions.BadRequest('SIM is invalid')
+    return sim
+
+
+def _upsert_ufi_account(db, imei, sim, domain):
+    password = _ufi_password(imei)
+    existed = db.execute(text(
+        "SELECT id FROM subscriber WHERE username = :username AND domain = :domain"
+    ), {'username': imei, 'domain': domain}).first()
+    db.execute(text(
+        "INSERT INTO subscriber (username, domain, password, email_address, rpid) "
+        "VALUES (:username, :domain, :password, '', '') "
+        "ON DUPLICATE KEY UPDATE password = :password"
+    ), {'username': imei, 'domain': domain, 'password': password})
+    action = 'updated' if existed else 'created'
+
+    if sim:
+        alias = db.execute(text(
+            "SELECT id FROM dbaliases WHERE alias_username = :sim AND alias_domain = :domain"
+        ), {'sim': sim, 'domain': domain}).first()
+        if alias is None:
+            db.execute(text(
+                "INSERT INTO dbaliases (alias_username, alias_domain, username, domain) "
+                "VALUES (:sim, :domain, :imei, :domain)"
+            ), {'sim': sim, 'domain': domain, 'imei': imei})
+        else:
+            db.execute(text(
+                "UPDATE dbaliases SET username = :imei, domain = :domain WHERE id = :id"
+            ), {'imei': imei, 'domain': domain, 'id': alias[0]})
+            action = 'updated'
+
+    return {
+        'imei': imei,
+        'sim': sim,
+        'domain': domain,
+        'action': action,
+    }
+
+
+def _parse_ufi_rows(payload):
+    rows = []
+    if isinstance(payload, dict):
+        if isinstance(payload.get('accounts'), list):
+            rows = payload['accounts']
+        elif payload.get('imei'):
+            rows = [payload]
+        elif isinstance(payload.get('rows'), list):
+            rows = payload['rows']
+    elif isinstance(payload, list):
+        rows = payload
+    return rows
+
+
+@api.route("/api/v1/ufi/accounts", methods=['GET'])
+@api_security
+def listUfiAccounts():
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+
+        db = startSession()
+        domain = request.args.get('domain') or _ufi_auth_domain()
+        result = db.execute(text(
+            "SELECT s.id, s.username AS imei, s.domain, "
+            "GROUP_CONCAT(DISTINCT a.alias_username ORDER BY a.alias_username SEPARATOR ',') AS sims, "
+            "MAX(loc.expires) AS expires, MAX(loc.received) AS received "
+            "FROM subscriber s "
+            "LEFT JOIN dbaliases a ON a.username = s.username AND a.domain = s.domain "
+            "LEFT JOIN location loc ON loc.username = s.username AND loc.expires > NOW() "
+            "WHERE s.domain = :domain "
+            "GROUP BY s.id, s.username, s.domain "
+            "ORDER BY s.id DESC"
+        ), {'domain': domain}).mappings().all()
+
+        data = []
+        for row in result:
+            sims = [item for item in str(row['sims'] or '').split(',') if item]
+            data.append({
+                'id': row['id'],
+                'imei': row['imei'],
+                'sim': sims[0] if sims else '',
+                'sims': sims,
+                'domain': row['domain'],
+                'online': bool(row['expires']),
+                'received': row['received'] or '',
+            })
+
+        return createApiResponse(msg='UFI accounts found', data=data)
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+@api.route("/api/v1/ufi/setup", methods=['GET'])
+@api_security
+def getUfiSetupStatus():
+    """Status for the UFI → dSIPRouter → VOS phone wizard."""
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+
+        db = startSession()
+        domain = _ufi_auth_domain()
+        sip_port = str(getattr(settings, 'KAM_SIP_PORT', None) or getattr(settings, 'INTERNAL_SIP_PORT', None) or 5060)
+        sip_host = str(getattr(settings, 'EXTERNAL_IP_ADDR', '') or domain)
+
+        ufi_total = int(db.execute(text(
+            "SELECT COUNT(*) FROM subscriber WHERE domain = :domain"
+        ), {'domain': domain}).scalar() or 0)
+        sim_aliases = int(db.execute(text(
+            "SELECT COUNT(*) FROM dbaliases a "
+            "INNER JOIN subscriber s ON s.username = a.username AND s.domain = a.domain "
+            "WHERE s.domain = :domain"
+        ), {'domain': domain}).scalar() or 0)
+
+        ufi_online = 0
+        registrations = []
+        try:
+            ufi_online = int(db.execute(text(
+                "SELECT COUNT(DISTINCT loc.username) FROM location loc "
+                "INNER JOIN subscriber s ON s.username = loc.username "
+                "WHERE s.domain = :domain AND loc.expires > NOW()"
+            ), {'domain': domain}).scalar() or 0)
+            registrations = []
+            for row in db.execute(text(
+                "SELECT loc.username AS imei, loc.received, loc.expires, loc.user_agent "
+                "FROM location loc "
+                "INNER JOIN subscriber s ON s.username = loc.username "
+                "WHERE s.domain = :domain AND loc.expires > NOW() "
+                "ORDER BY loc.expires DESC LIMIT 20"
+            ), {'domain': domain}).mappings().all():
+                registrations.append({
+                    'imei': row['imei'],
+                    'received': row['received'] or '',
+                    'expires': str(row['expires'] or ''),
+                    'user_agent': row['user_agent'] or '',
+                })
+        except Exception:
+            pass
+
+        _ensure_phones_table(db)
+        db.commit()
+        phones = [dict(row) for row in db.execute(text(
+            "SELECT id, extension, name, gwgroupid, dids FROM dsip_phone ORDER BY extension"
+        )).mappings().all()]
+        phones_total = len(phones)
+        dids_bound = 0
+        for phone in phones:
+            dids_bound += len(_parse_did_list(phone.get('dids'), strict=False))
+
+        vos_groups = []
+        vos_gwids = set()
+        for row in db.execute(text(
+            "SELECT id, gwlist, description FROM dr_gw_lists "
+            "WHERE description LIKE :q OR id = 100 ORDER BY id"
+        ), {'q': '%VOS%'}).mappings().all():
+            fields = strFieldsToDict(row['description'] or '')
+            gwids = []
+            for part in str(row['gwlist'] or '').split(','):
+                part = part.strip().lstrip('#')
+                if part.isdigit():
+                    gwid = int(part)
+                    gwids.append(gwid)
+                    vos_gwids.add(gwid)
+            vos_groups.append({
+                'id': row['id'],
+                'name': fields.get('name') or 'Carrier Group {}'.format(row['id']),
+                'gwids': gwids,
+            })
+
+        vos_gateways = []
+        if vos_gwids:
+            vos_gateways = [dict(row) for row in db.execute(text(
+                "SELECT gwid, address, description FROM dr_gateways "
+                "WHERE gwid IN :ids ORDER BY gwid"
+            ).bindparams(bindparam('ids', expanding=True)), {'ids': list(vos_gwids)}).mappings().all()]
+        if not vos_gateways:
+            vos_gateways = [dict(row) for row in db.execute(text(
+                "SELECT gwid, address, description FROM dr_gateways "
+                "WHERE address = :addr ORDER BY gwid"
+            ), {'addr': '8.136.109.38'}).mappings().all()]
+
+        vos_ready = bool(vos_groups and vos_gateways)
+        if not vos_ready:
+            next_step = 1
+        elif ufi_total == 0:
+            next_step = 2
+        elif phones_total == 0 or dids_bound == 0:
+            next_step = 3
+        else:
+            next_step = 4
+
+        return createApiResponse(msg='UFI setup status', data=[{
+            'sip_host': sip_host,
+            'sip_port': sip_port,
+            'auth_domain': domain,
+            'ufi_total': ufi_total,
+            'ufi_online': ufi_online,
+            'sim_aliases': sim_aliases,
+            'phones_total': phones_total,
+            'dids_bound': dids_bound,
+            'phones': phones,
+            'vos_groups': vos_groups,
+            'vos_gateways': vos_gateways,
+            'registrations': registrations,
+            'next_step': next_step,
+        }])
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+@api.route("/api/v1/ufi/accounts", methods=['POST'])
+@api_security
+def addUfiAccount():
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+
+        db = startSession()
+        payload = getRequestData() or {}
+        domain = payload.get('domain') or _ufi_auth_domain()
+        imei = _normalize_ufi_imei(payload.get('imei'))
+        sim = _normalize_ufi_sim(payload.get('sim'), required=False)
+        account = _upsert_ufi_account(db, imei, sim, domain)
+        db.commit()
+        getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
+        return createApiResponse(
+            msg='UFI account saved',
+            data=[account],
+            kamreload=True,
+        )
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+@api.route("/api/v1/ufi/accounts/<int:account_id>", methods=['PUT'])
+@api_security
+def updateUfiAccount(account_id):
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+
+        db = startSession()
+        row = db.execute(text(
+            "SELECT id, username, domain FROM subscriber WHERE id = :id"
+        ), {'id': account_id}).mappings().first()
+        if row is None:
+            raise http_exceptions.NotFound('UFI account not found')
+
+        payload = getRequestData() or {}
+        old_imei = row['username']
+        domain = row['domain']
+        new_imei = _normalize_ufi_imei(payload.get('imei') or old_imei)
+        sim_value = payload.get('sim')
+        if sim_value is None and payload.get('sims') is not None:
+            if isinstance(payload.get('sims'), list):
+                sim_value = ','.join(str(item) for item in payload.get('sims'))
+            else:
+                sim_value = payload.get('sims')
+        sims = []
+        if sim_value not in (None, ''):
+            for part in re.split(r'[\s,;]+', str(sim_value)):
+                if part:
+                    sims.append(_normalize_ufi_sim(part, required=True))
+
+        password = _ufi_password(new_imei)
+        if new_imei != old_imei:
+            taken = db.execute(text(
+                "SELECT id FROM subscriber WHERE username = :username AND domain = :domain AND id <> :id"
+            ), {'username': new_imei, 'domain': domain, 'id': account_id}).first()
+            if taken:
+                raise http_exceptions.BadRequest('IMEI already exists')
+            db.execute(text(
+                "UPDATE subscriber SET username = :username, password = :password "
+                "WHERE id = :id"
+            ), {'username': new_imei, 'password': password, 'id': account_id})
+            db.execute(text(
+                "UPDATE dbaliases SET username = :new_imei WHERE username = :old_imei AND domain = :domain"
+            ), {'new_imei': new_imei, 'old_imei': old_imei, 'domain': domain})
+        else:
+            db.execute(text(
+                "UPDATE subscriber SET password = :password WHERE id = :id"
+            ), {'password': password, 'id': account_id})
+
+        db.execute(text(
+            "DELETE FROM dbaliases WHERE username = :imei AND domain = :domain"
+        ), {'imei': new_imei, 'domain': domain})
+        for sim in sims:
+            existing = db.execute(text(
+                "SELECT id FROM dbaliases WHERE alias_username = :sim AND alias_domain = :domain"
+            ), {'sim': sim, 'domain': domain}).first()
+            if existing is None:
+                db.execute(text(
+                    "INSERT INTO dbaliases (alias_username, alias_domain, username, domain) "
+                    "VALUES (:sim, :domain, :imei, :domain)"
+                ), {'sim': sim, 'domain': domain, 'imei': new_imei})
+            else:
+                db.execute(text(
+                    "UPDATE dbaliases SET username = :imei, domain = :domain WHERE id = :id"
+                ), {'imei': new_imei, 'domain': domain, 'id': existing[0]})
+
+        db.commit()
+        getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
+        return createApiResponse(
+            msg='UFI account updated',
+            data=[{'id': account_id, 'imei': new_imei, 'sims': sims, 'domain': domain}],
+            kamreload=True,
+        )
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+@api.route("/api/v1/ufi/accounts/<int:account_id>", methods=['DELETE'])
+@api_security
+def deleteUfiAccount(account_id):
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+
+        db = startSession()
+        row = db.execute(text(
+            "SELECT id, username, domain FROM subscriber WHERE id = :id"
+        ), {'id': account_id}).mappings().first()
+        if row is None:
+            raise http_exceptions.NotFound('UFI account not found')
+
+        db.execute(text(
+            "DELETE FROM dbaliases WHERE username = :imei AND domain = :domain"
+        ), {'imei': row['username'], 'domain': row['domain']})
+        db.execute(text("DELETE FROM subscriber WHERE id = :id"), {'id': account_id})
+        db.commit()
+        getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
+        return createApiResponse(
+            msg='UFI account deleted',
+            data=[{'id': account_id, 'imei': row['username']}],
+            kamreload=True,
+        )
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+@api.route("/api/v1/ufi/accounts/import", methods=['POST'])
+@api_security
+def importUfiAccounts():
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+
+        db = startSession()
+        payload = getRequestData() or {}
+        domain = payload.get('domain') or _ufi_auth_domain()
+        raw_rows = _parse_ufi_rows(payload)
+        if not raw_rows and request.files.get('file'):
+            stream = io.TextIOWrapper(request.files['file'].stream, encoding='utf-8-sig')
+            reader = csv.reader(stream)
+            for parts in reader:
+                if not parts:
+                    continue
+                raw_rows.append(parts)
+
+        created = 0
+        updated = 0
+        skipped = 0
+        errors = []
+        saved = []
+
+        for index, raw in enumerate(raw_rows, start=1):
+            try:
+                if isinstance(raw, dict):
+                    imei_val = raw.get('imei') or raw.get('IMEI') or raw.get('username')
+                    sim_val = raw.get('sim') or raw.get('SIM') or raw.get('sim_number') or raw.get('SIM号')
+                elif isinstance(raw, (list, tuple)):
+                    if not raw or str(raw[0]).strip().lower() in ('imei', 'username'):
+                        continue
+                    imei_val = raw[0]
+                    sim_val = raw[1] if len(raw) > 1 else ''
+                else:
+                    raise http_exceptions.BadRequest('Unrecognized row format')
+
+                imei = _normalize_ufi_imei(imei_val)
+                sim = _normalize_ufi_sim(sim_val, required=False)
+                account = _upsert_ufi_account(db, imei, sim, domain)
+                saved.append(account)
+                if account['action'] == 'created':
+                    created += 1
+                else:
+                    updated += 1
+            except Exception as ex:
+                skipped += 1
+                errors.append({'row': index, 'msg': str(ex)})
+
+        db.commit()
+        if created or updated:
+            getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
+
+        return createApiResponse(
+            msg='Imported {0} created, {1} updated, {2} skipped'.format(created, updated, skipped),
+            data=[{
+                'created': created,
+                'updated': updated,
+                'skipped': skipped,
+                'errors': errors[:50],
+                'accounts': saved[:200],
+            }],
+            kamreload=bool(created or updated),
+        )
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+def _ensure_phones_table(db):
+    db.execute(text(
+        "CREATE TABLE IF NOT EXISTS dsip_phone ("
+        "id INT UNSIGNED NOT NULL AUTO_INCREMENT,"
+        "extension VARCHAR(64) NOT NULL,"
+        "name VARCHAR(128) NOT NULL DEFAULT '',"
+        "gwgroupid INT UNSIGNED NOT NULL DEFAULT 0,"
+        "dids TEXT NOT NULL,"
+        "PRIMARY KEY (id),"
+        "UNIQUE KEY extension_idx (extension)"
+        ")"
+    ))
+    count = db.execute(text("SELECT COUNT(*) FROM dsip_phone")).scalar()
+    if not count:
+        vos = db.execute(text(
+            "SELECT id FROM dr_gw_lists WHERE description LIKE :q OR id = 100 ORDER BY id LIMIT 1"
+        ), {'q': '%VOS%'}).first()
+        gwgroupid = int(vos[0]) if vos else 0
+        db.execute(text(
+            "INSERT INTO dsip_phone (extension, name, gwgroupid, dids) "
+            "VALUES ('1002', '话机 1002', :gwgroupid, '')"
+        ), {'gwgroupid': gwgroupid})
+
+
+def _parse_did_list(value, strict=True):
+    if isinstance(value, list):
+        raw = ','.join(str(item) for item in value)
+    else:
+        raw = str(value or '')
+    dids = []
+    seen = set()
+    for part in re.split(r'[\s,;]+', raw):
+        did = re.sub(r'[^\d+]', '', part)
+        if not did or did in seen:
+            continue
+        if not re.fullmatch(r'\+?\d{8,20}', did):
+            if strict:
+                raise http_exceptions.BadRequest('DID is invalid: {}'.format(part))
+            continue
+        seen.add(did)
+        dids.append(did)
+    return dids
+
+
+def _default_phone_gwgroupid(db):
+    vos = db.execute(text(
+        "SELECT id FROM dr_gw_lists WHERE description LIKE :q OR id = 100 ORDER BY id LIMIT 1"
+    ), {'q': '%VOS%'}).first()
+    return int(vos[0]) if vos else 0
+
+
+def _phone_row(row):
+    dids = _parse_did_list(row['dids'], strict=False) if row['dids'] else []
+    return {
+        'id': row['id'],
+        'extension': row['extension'],
+        'name': row['name'],
+        'gwgroupid': int(row['gwgroupid'] or 0),
+        'dids': dids,
+        'did_text': ','.join(dids),
+        'did_count': len(dids),
+    }
+
+
+def _sync_phone_inbound(db, phone_id, extension, gwgroupid, dids):
+    marker = 'phone:{}'.format(phone_id)
+    existing = db.execute(text(
+        "SELECT ruleid, prefix, description FROM dr_rules "
+        "WHERE groupid = :groupid AND description LIKE :marker"
+    ), {'groupid': settings.FLT_INBOUND, 'marker': '%' + marker + '%'}).mappings().all()
+    existing_by_prefix = {row['prefix']: row for row in existing}
+    wanted = set(dids)
+    gwlist = '#{}'.format(gwgroupid) if gwgroupid else ''
+
+    for did in dids:
+        description = dictToStrFields({'name': extension, 'phone': phone_id})
+        current = db.query(InboundMapping).filter(
+            InboundMapping.groupid == settings.FLT_INBOUND,
+            InboundMapping.prefix == did,
+        ).first()
+        if current is None:
+            db.add(InboundMapping(settings.FLT_INBOUND, did, gwlist, description))
+        else:
+            current.gwlist = gwlist
+            current.description = description
+        existing_by_prefix.pop(did, None)
+
+    for prefix, row in existing_by_prefix.items():
+        if prefix in wanted:
+            continue
+        db.execute(text("DELETE FROM dr_rules WHERE ruleid = :ruleid"), {'ruleid': row['ruleid']})
+
+
+@api.route("/api/v1/phones", methods=['GET'])
+@api_security
+def listPhones():
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+        db = startSession()
+        _ensure_phones_table(db)
+        db.commit()
+        rows = db.execute(text(
+            "SELECT id, extension, name, gwgroupid, dids FROM dsip_phone ORDER BY extension"
+        )).mappings().all()
+        return createApiResponse(msg='Phones found', data=[_phone_row(row) for row in rows])
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+@api.route("/api/v1/phones", methods=['POST'])
+@api_security
+def addPhone():
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+        db = startSession()
+        _ensure_phones_table(db)
+        payload = getRequestData() or {}
+        extension = str(payload.get('extension') or '').strip()
+        if not extension:
+            raise http_exceptions.BadRequest('Extension is required')
+        name = str(payload.get('name') or ('话机 ' + extension)).strip()
+        gwgroupid = int(payload.get('gwgroupid') or _default_phone_gwgroupid(db) or 0)
+        dids = _parse_did_list(payload.get('dids'))
+        db.execute(text(
+            "INSERT INTO dsip_phone (extension, name, gwgroupid, dids) "
+            "VALUES (:extension, :name, :gwgroupid, :dids)"
+        ), {
+            'extension': extension,
+            'name': name,
+            'gwgroupid': gwgroupid,
+            'dids': ','.join(dids),
+        })
+        phone_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+        _sync_phone_inbound(db, phone_id, extension, gwgroupid, dids)
+        db.commit()
+        getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
+        row = db.execute(text(
+            "SELECT id, extension, name, gwgroupid, dids FROM dsip_phone WHERE id = :id"
+        ), {'id': phone_id}).mappings().first()
+        return createApiResponse(msg='Phone created', data=[_phone_row(row)], kamreload=True)
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+@api.route("/api/v1/phones/<int:phone_id>", methods=['GET', 'PUT'])
+@api_security
+def handlePhone(phone_id):
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+        db = startSession()
+        _ensure_phones_table(db)
+        row = db.execute(text(
+            "SELECT id, extension, name, gwgroupid, dids FROM dsip_phone WHERE id = :id"
+        ), {'id': phone_id}).mappings().first()
+        if row is None:
+            raise http_exceptions.NotFound('Phone not found')
+
+        if request.method == 'GET':
+            return createApiResponse(msg='Phone found', data=[_phone_row(row)])
+
+        payload = getRequestData() or {}
+        extension = str(payload.get('extension') or row['extension']).strip()
+        name = str(payload.get('name') or row['name']).strip()
+        gwgroupid = int(payload.get('gwgroupid') if payload.get('gwgroupid') not in (None, '') else row['gwgroupid'] or 0)
+        if 'dids' in payload:
+            dids = _parse_did_list(payload.get('dids'))
+        else:
+            dids = _parse_did_list(row['dids'])
+        db.execute(text(
+            "UPDATE dsip_phone SET extension = :extension, name = :name, "
+            "gwgroupid = :gwgroupid, dids = :dids WHERE id = :id"
+        ), {
+            'extension': extension,
+            'name': name,
+            'gwgroupid': gwgroupid,
+            'dids': ','.join(dids),
+            'id': phone_id,
+        })
+        _sync_phone_inbound(db, phone_id, extension, gwgroupid, dids)
+        db.commit()
+        getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
+        row = db.execute(text(
+            "SELECT id, extension, name, gwgroupid, dids FROM dsip_phone WHERE id = :id"
+        ), {'id': phone_id}).mappings().first()
+        return createApiResponse(msg='Phone updated', data=[_phone_row(row)], kamreload=True)
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+@api.route("/api/v1/phones/<int:phone_id>/dids", methods=['POST'])
+@api_security
+def appendPhoneDids(phone_id):
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+        db = startSession()
+        _ensure_phones_table(db)
+        row = db.execute(text(
+            "SELECT id, extension, name, gwgroupid, dids FROM dsip_phone WHERE id = :id"
+        ), {'id': phone_id}).mappings().first()
+        if row is None:
+            raise http_exceptions.NotFound('Phone not found')
+
+        payload = getRequestData() or {}
+        extra = _parse_did_list(payload.get('dids') or payload.get('append') or payload.get('sims'))
+        current = _parse_did_list(row['dids'])
+        merged = current[:]
+        added = []
+        for did in extra:
+            if did not in merged:
+                merged.append(did)
+                added.append(did)
+        db.execute(text(
+            "UPDATE dsip_phone SET dids = :dids WHERE id = :id"
+        ), {'dids': ','.join(merged), 'id': phone_id})
+        _sync_phone_inbound(db, phone_id, row['extension'], int(row['gwgroupid'] or 0), merged)
+        db.commit()
+        getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
+        row = db.execute(text(
+            "SELECT id, extension, name, gwgroupid, dids FROM dsip_phone WHERE id = :id"
+        ), {'id': phone_id}).mappings().first()
+        return createApiResponse(
+            msg='Appended {0} DIDs'.format(len(added)),
+            data=[_phone_row(row)],
+            kamreload=True,
+        )
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
 @api.route("/api/v1/numberenrichment", methods=['GET'])
 @api.route("/api/v1/numberenrichment/<int:rule_id>", methods=['GET'])
 @api_security
@@ -2743,7 +3457,11 @@ def generateCDRS(
     filter_params=None,
 ):
     """
-    Generate CDRs Report for a gwgroup
+    Generate CDRs Report for a gwgroup by reading Kamailio acc directly.
+
+    INVITE rows are treated as call starts; matching BYE rows (if any) provide
+    duration. When nonCompletedCalls is False only answered/completed calls
+    (INVITE with matching BYE) are returned.
 
     :param gwgroupid:       gwgroup to generate cdr's for
     :type gwgroupid:        int|str
@@ -2770,10 +3488,31 @@ def generateCDRS(
     # define here so we can cleanup in finally statement
     csv_file = ''
 
+    # Column index (1-based, used by DataTables ORDER BY) -> SQL expression
+    order_columns = {
+        1: 'cdr_id',
+        2: 'call_start_time',
+        3: 'call_duration',
+        4: 'call_direction',
+        5: 'src_gwgroupid',
+        6: 'src_gwgroupname',
+        7: 'dst_gwgroupid',
+        8: 'dst_gwgroupname',
+        9: 'src_username',
+        10: 'dst_username',
+        11: 'src_address',
+        12: 'dst_address',
+        13: 'hangup_reason',
+        14: 'call_id',
+    }
+
     try:
         db = startSession()
 
+        gwgroupid_int = int(gwgroupid) if str(gwgroupid).isdigit() else 0
         if isinstance(gwgroupid, int):
+            gwgroupid = str(gwgroupid)
+        else:
             gwgroupid = str(gwgroupid)
         if report_type is None:
             report_type = 'json'
@@ -2786,65 +3525,215 @@ def generateCDRS(
         if cdrfilter is None:
             cdrfilter = tuple()
         else:
-            cdrfilter = tuple(cdrfilter.split(','))
+            cdrfilter = tuple(x for x in cdrfilter.split(',') if x)
         if nonCompletedCalls is None:
             nonCompletedCalls = True
         if filter_params is None:
             filter_params = {'paging': False, 'searching': False, 'ordering': False}
 
-        gwgroup = db.query(GatewayGroups).filter(GatewayGroups.id == gwgroupid).first()
-        if gwgroup is not None:
-            gwgroupName = strFieldsToDict(gwgroup.description)['name']
+        # gwgroupid == 0 means "all groups" — no GatewayGroups row required
+        if gwgroupid_int == 0:
+            gwgroupName = 'All Calls'
         else:
-            if run_standalone:
-                IO.logerr(f'Endpont group {gwgroupid} does not exist')
-                return None
-            response_payload['status'] = "0"
-            response_payload['message'] = "Endpont group doesn't exist"
-            return jsonify(response_payload)
+            gwgroup = db.query(GatewayGroups).filter(GatewayGroups.id == gwgroupid).first()
+            if gwgroup is not None:
+                gwgroupName = strFieldsToDict(gwgroup.description).get('name') or str(gwgroupid)
+            else:
+                if run_standalone:
+                    IO.logerr(f'Endpont group {gwgroupid} does not exist')
+                    return None
+                response_payload['status'] = "0"
+                response_payload['message'] = "Endpont group doesn't exist"
+                return jsonify(response_payload)
+
+        # Optional enriched columns (added by resources/cdr_enrich_kamailio.sh)
+        acc_cols = {r[0] for r in db.execute(text('SHOW COLUMNS FROM acc')).all()}
+        has_orig = 'orig_caller' in acc_cols and 'orig_callee' in acc_cols
+        orig_caller_expr = "NULLIF(inv.orig_caller, '')" if has_orig else "NULL"
+        orig_callee_expr = "NULLIF(inv.orig_callee, '')" if has_orig else "NULL"
+
+        sql_params = {"gwgroupid": gwgroupid, "dtfilter": dtfilter}
+
+        # Read call records directly from Kamailio acc:
+        # INVITE = call start; earliest matching BYE = hangup (for duration).
+        # Original callee often lives in dst_ouser / X-VOLTE (UFI bridge).
+        base_query = f"""
+            SELECT
+                inv.id AS cdr_id,
+                inv.time AS call_start_time,
+                COALESCE(
+                    TIMESTAMPDIFF(
+                        SECOND,
+                        inv.time,
+                        (
+                            SELECT bye.time
+                            FROM acc bye
+                            WHERE bye.method = 'BYE'
+                              AND bye.callid = inv.callid
+                              AND (
+                                    (bye.from_tag = inv.from_tag AND bye.to_tag = inv.to_tag)
+                                 OR (bye.from_tag = inv.to_tag AND bye.to_tag = inv.from_tag)
+                              )
+                            ORDER BY bye.time ASC
+                            LIMIT 1
+                        )
+                    ),
+                    0
+                ) AS call_duration,
+                CASE
+                    WHEN inv.calltype IS NOT NULL AND inv.calltype != '' THEN inv.calltype
+                    WHEN inv.dst_ouser IS NOT NULL AND inv.dst_ouser != '' AND inv.dst_ouser != inv.dst_user THEN 'outbound'
+                    WHEN EXISTS (
+                        SELECT 1 FROM dr_gateways g
+                        WHERE (g.address = inv.src_ip OR g.address LIKE CONCAT(inv.src_ip, ':%'))
+                          AND g.type = 9
+                    ) THEN 'outbound'
+                    WHEN EXISTS (
+                        SELECT 1 FROM dr_gateways g
+                        WHERE (g.address = inv.src_ip OR g.address LIKE CONCAT(inv.src_ip, ':%'))
+                          AND g.type = 8
+                    ) THEN 'inbound'
+                    ELSE ''
+                END AS call_direction,
+                inv.src_gwgroupid AS src_gwgroupid,
+                COALESCE(
+                    NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(IFNULL(t2.description, ''), 'name:', -1), ',', 1), ''),
+                    NULLIF(t2.description, ''),
+                    (
+                        SELECT COALESCE(
+                            NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(IFNULL(gl.description, ''), 'name:', -1), ',', 1), ''),
+                            NULLIF(gl.description, ''),
+                            NULLIF(gw.description, '')
+                        )
+                        FROM dr_gateways gw
+                        LEFT JOIN dr_gw_lists gl ON FIND_IN_SET(gw.gwid, REPLACE(IFNULL(gl.gwlist, ''), ' ', ''))
+                        WHERE gw.address = inv.src_ip OR gw.address LIKE CONCAT(inv.src_ip, ':%')
+                        ORDER BY (gl.id IS NULL), gl.id
+                        LIMIT 1
+                    )
+                ) AS src_gwgroupname,
+                inv.dst_gwgroupid AS dst_gwgroupid,
+                COALESCE(
+                    NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(IFNULL(t3.description, ''), 'name:', -1), ',', 1), ''),
+                    NULLIF(t3.description, ''),
+                    ''
+                ) AS dst_gwgroupname,
+                COALESCE(
+                    {orig_caller_expr},
+                    NULLIF(inv.src_user, '')
+                ) AS src_username,
+                COALESCE(
+                    {orig_callee_expr},
+                    NULLIF(inv.dst_ouser, ''),
+                    NULLIF(inv.dst_user, '')
+                ) AS dst_username,
+                inv.src_ip AS src_address,
+                inv.dst_domain AS dst_address,
+                CASE
+                    WHEN inv.sip_code IS NOT NULL AND inv.sip_code != '' AND inv.sip_code != '200'
+                        THEN CONCAT(
+                            inv.sip_code, ' ', IFNULL(inv.sip_reason, ''),
+                            CASE
+                                WHEN inv.sip_code = '487' THEN ' (振铃前取消)'
+                                WHEN inv.sip_code IN ('486', '603') THEN ' (被叫拒接)'
+                                WHEN inv.sip_code IN ('480', '408') THEN ' (无人接听/超时)'
+                                WHEN inv.sip_code LIKE '5%' THEN ' (路由/对端失败)'
+                                ELSE ' (未接通)'
+                            END
+                        )
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM acc bye
+                        WHERE bye.method = 'BYE'
+                          AND bye.callid = inv.callid
+                          AND (
+                                (bye.from_tag = inv.from_tag AND bye.to_tag = inv.to_tag)
+                             OR (bye.from_tag = inv.to_tag AND bye.to_tag = inv.from_tag)
+                          )
+                    ) THEN '无挂机记录(可能仍进行中)'
+                    WHEN (
+                        SELECT bye.src_ip
+                        FROM acc bye
+                        WHERE bye.method = 'BYE'
+                          AND bye.callid = inv.callid
+                          AND (
+                                (bye.from_tag = inv.from_tag AND bye.to_tag = inv.to_tag)
+                             OR (bye.from_tag = inv.to_tag AND bye.to_tag = inv.from_tag)
+                          )
+                        ORDER BY bye.time ASC
+                        LIMIT 1
+                    ) = inv.src_ip
+                        THEN CONCAT(
+                            '主叫挂机 (BYE ',
+                            IFNULL((
+                                SELECT bye.sip_code FROM acc bye
+                                WHERE bye.method = 'BYE' AND bye.callid = inv.callid
+                                  AND ((bye.from_tag = inv.from_tag AND bye.to_tag = inv.to_tag)
+                                    OR (bye.from_tag = inv.to_tag AND bye.to_tag = inv.from_tag))
+                                ORDER BY bye.time ASC LIMIT 1
+                            ), ''),
+                            ' ',
+                            IFNULL((
+                                SELECT bye.sip_reason FROM acc bye
+                                WHERE bye.method = 'BYE' AND bye.callid = inv.callid
+                                  AND ((bye.from_tag = inv.from_tag AND bye.to_tag = inv.to_tag)
+                                    OR (bye.from_tag = inv.to_tag AND bye.to_tag = inv.from_tag))
+                                ORDER BY bye.time ASC LIMIT 1
+                            ), ''),
+                            ')'
+                        )
+                    ELSE CONCAT(
+                        '被叫挂机 (BYE ',
+                        IFNULL((
+                            SELECT bye.sip_code FROM acc bye
+                            WHERE bye.method = 'BYE' AND bye.callid = inv.callid
+                              AND ((bye.from_tag = inv.from_tag AND bye.to_tag = inv.to_tag)
+                                OR (bye.from_tag = inv.to_tag AND bye.to_tag = inv.from_tag))
+                            ORDER BY bye.time ASC LIMIT 1
+                        ), ''),
+                        ' ',
+                        IFNULL((
+                            SELECT bye.sip_reason FROM acc bye
+                            WHERE bye.method = 'BYE' AND bye.callid = inv.callid
+                              AND ((bye.from_tag = inv.from_tag AND bye.to_tag = inv.to_tag)
+                                OR (bye.from_tag = inv.to_tag AND bye.to_tag = inv.from_tag))
+                            ORDER BY bye.time ASC LIMIT 1
+                        ), ''),
+                        ')'
+                    )
+                END AS hangup_reason,
+                inv.callid AS call_id
+            FROM acc inv
+            LEFT JOIN dr_gw_lists t2 ON (inv.src_gwgroupid = t2.id)
+            LEFT JOIN dr_gw_lists t3 ON (inv.dst_gwgroupid = t3.id)
+            WHERE inv.method = 'INVITE'
+              AND inv.time >= :dtfilter
+        """
+
+        if gwgroupid_int != 0:
+            base_query += """
+              AND (inv.src_gwgroupid = :gwgroupid OR inv.dst_gwgroupid = :gwgroupid)
+            """
+
+        if not nonCompletedCalls:
+            # Billable / completed calls only: require a matching BYE
+            base_query += """
+              AND EXISTS (
+                    SELECT 1
+                    FROM acc bye
+                    WHERE bye.method = 'BYE'
+                      AND bye.callid = inv.callid
+                      AND (
+                            (bye.from_tag = inv.from_tag AND bye.to_tag = inv.to_tag)
+                         OR (bye.from_tag = inv.to_tag AND bye.to_tag = inv.from_tag)
+                      )
+              )
+            """
 
         if len(cdrfilter) > 0:
-            sql_params = {"gwgroupid": gwgroupid, "dtfilter": dtfilter, "cdrfilter": cdrfilter}
-            query1 = (
-                """SELECT t1.cdr_id, t1.call_start_time, t1.duration AS call_duration, t1.calltype AS call_direction,
-                          t2.id AS src_gwgroupid, substring_index(substring_index(t2.description, 'name:', -1), ',', 1) AS src_gwgroupname,
-                          t3.id AS dst_gwgroupid, substring_index(substring_index(t3.description, 'name:', -1), ',', 1) AS dst_gwgroupname,
-                          t1.src_username, t1.dst_username, t1.src_ip AS src_address, t1.dst_domain AS dst_address, t1.sip_call_id AS call_id
-                FROM cdrs t1
-                JOIN dr_gw_lists t2 ON (t1.src_gwgroupid = t2.id)
-                JOIN dr_gw_lists t3 ON (t1.dst_gwgroupid = t3.id)
-                WHERE (t2.id = :gwgroupid OR t3.id = :gwgroupid) AND t1.call_start_time >= :dtfilter AND t1.cdr_id IN :cdrfilter
-                ORDER BY t1.call_start_time DESC"""
-            )
-        else:
-            sql_params = {"gwgroupid": gwgroupid, "dtfilter": dtfilter}
-            query1 = (
-                """SELECT t1.cdr_id, t1.call_start_time, t1.duration AS call_duration, t1.calltype AS call_direction,
-                          t2.id AS src_gwgroupid, substring_index(substring_index(t2.description, 'name:', -1), ',', 1) AS src_gwgroupname,
-                          t3.id AS dst_gwgroupid, substring_index(substring_index(t3.description, 'name:', -1), ',', 1) AS dst_gwgroupname,
-                          t1.src_username, t1.dst_username, t1.src_ip AS src_address, t1.dst_domain AS dst_address, t1.sip_call_id AS call_id
-                FROM cdrs t1
-                JOIN dr_gw_lists t2 ON (t1.src_gwgroupid = t2.id)
-                JOIN dr_gw_lists t3 ON (t1.dst_gwgroupid = t3.id)
-                WHERE (t2.id = :gwgroupid OR t3.id = :gwgroupid) AND t1.call_start_time >= :dtfilter
-                ORDER BY t1.call_start_time DESC"""
-            )
+            sql_params['cdrfilter'] = list(cdrfilter)
+            base_query += " AND inv.id IN :cdrfilter"
 
-        if nonCompletedCalls:
-            query2 = (
-                """SELECT acc.id AS cdr_id, acc.time, 0, acc.calltype,
-                acc.src_gwgroupid, SUBSTRING_INDEX(SUBSTRING_INDEX(t2.description, 'name:', -1), ',', 1) AS src_gwgroupname,
-                acc.dst_gwgroupid, SUBSTRING_INDEX(SUBSTRING_INDEX(t3.description, 'name:', -1), ',', 1) AS dst_gwgroupname,
-                acc.src_user,acc.dst_user,acc.src_ip,acc.dst_domain,acc.callid
-                FROM acc
-                JOIN dr_gw_lists t2 ON (acc.src_gwgroupid = t2.id)
-                LEFT JOIN dr_gw_lists t3 ON (acc.dst_gwgroupid = t3.id)
-                WHERE (t2.id = :gwgroupid OR t3.id = :gwgroupid) AND acc.time >= :dtfilter
-                ORDER BY acc.time DESC"""
-            )
-            sql = f'SELECT SQL_CALC_FOUND_ROWS * FROM (({query1}) UNION ({query2})) t_all'
-        else:
-            sql = f'SELECT SQL_CALC_FOUND_ROWS * FROM ({query1}) t_all'
+        sql = f'SELECT SQL_CALC_FOUND_ROWS * FROM ({base_query}) t_all'
 
         if filter_params['searching']:
             if filter_params['search_regex']:
@@ -2860,6 +3749,7 @@ def generateCDRS(
                 OR `dst_username` REGEXP :search_val
                 OR `src_address` REGEXP :search_val
                 OR `dst_address` REGEXP :search_val
+                OR `hangup_reason` REGEXP :search_val
                 OR `call_id` REGEXP :search_val
                 '''
             else:
@@ -2875,21 +3765,24 @@ def generateCDRS(
                 OR `dst_username` LIKE :search_val
                 OR `src_address` LIKE :search_val
                 OR `dst_address` LIKE :search_val
+                OR `hangup_reason` LIKE :search_val
                 OR `call_id` LIKE :search_val
                 '''
         if filter_params['ordering']:
-            sql_params['order_col'] = filter_params['order_col']
-            if filter_params['order_dir'] == 'desc':
-                sql = sql + ' ORDER BY :order_col DESC'
-            else:
-                sql = sql + ' ORDER BY :order_col ASC'
+            order_col = order_columns.get(int(filter_params['order_col']), 'call_start_time')
+            order_dir = 'DESC' if filter_params.get('order_dir') == 'desc' else 'ASC'
+            sql = sql + f' ORDER BY `{order_col}` {order_dir}'
+        else:
+            sql = sql + ' ORDER BY `call_start_time` DESC'
         if filter_params['paging']:
             sql_params['page_start'] = filter_params['page_start']
             sql_params['page_len'] = filter_params['page_len']
             sql = sql + ' LIMIT :page_len OFFSET :page_start'
-        sql = text(sql)
 
-        rows = db.execute(sql, sql_params).all()
+        stmt = text(sql)
+        if len(cdrfilter) > 0:
+            stmt = stmt.bindparams(bindparam('cdrfilter', expanding=True))
+        rows = db.execute(stmt, sql_params).all()
         total_rows = db.execute(text('SELECT FOUND_ROWS()')).scalar()
         # TODO: does not work as described by datatables, clientside JS expects the count before limiting
         # only effects the text displayed on the bottom left (filter shown when searching)
@@ -2900,23 +3793,29 @@ def generateCDRS(
         dataFields = [
             'cdr_id', 'call_start_time', 'call_duration', 'call_direction', 'src_gwgroupid',
             'src_gwgroupname', 'dst_gwgroupid', 'dst_gwgroupname', 'src_username',
-            'dst_username', 'src_address', 'dst_address', 'call_id'
+            'dst_username', 'src_address', 'dst_address', 'hangup_reason', 'call_id'
         ]
+        direction_labels = {
+            'outbound': '呼出',
+            'inbound': '呼入',
+        }
         for row in rows:
             data = {}
             data['cdr_id'] = int(row[0])
             data['call_start_time'] = row[1]
             data['call_duration'] = str(row[2])
-            data['call_direction'] = row[3]
+            direction = (row[3] or '').strip().lower()
+            data['call_direction'] = direction_labels.get(direction, direction)
             data['src_gwgroupid'] = row[4]
-            data['src_gwgroupname'] = row[5]
+            data['src_gwgroupname'] = row[5] or ''
             data['dst_gwgroupid'] = row[6]
-            data['dst_gwgroupname'] = row[7]
-            data['src_username'] = row[8]
-            data['dst_username'] = row[9]
-            data['src_address'] = row[10]
-            data['dst_address'] = row[11]
-            data['call_id'] = row[12]
+            data['dst_gwgroupname'] = row[7] or ''
+            data['src_username'] = row[8] or ''
+            data['dst_username'] = row[9] or ''
+            data['src_address'] = row[10] or ''
+            data['dst_address'] = row[11] or ''
+            data['hangup_reason'] = row[12] or ''
+            data['call_id'] = row[13] or ''
             cdrs.append(data)
 
         if not run_standalone:
@@ -2982,14 +3881,52 @@ def generateCDRS(
             os.remove(csv_file)
 
 
+@api.route("/api/v1/cdrs/groups", methods=['GET'])
+@api_security
+def listCdrGroups():
+    """
+    List all gateway groups (endpoint + carrier) for the CDR filter dropdown.
+    """
+    db = DummySession()
+    try:
+        if settings.DEBUG:
+            debugEndpoint()
+
+        db = startSession()
+        groups = db.query(GatewayGroups).order_by(GatewayGroups.id.asc()).all()
+        response_data = []
+        for group in groups:
+            fields = strFieldsToDict(group.description)
+            name = fields.get('name') or group.description or str(group.id)
+            gtype = fields.get('type', '')
+            if str(gtype) == str(settings.FLT_PBX):
+                label = f"[Endpoint] {name}"
+            elif str(gtype) == str(settings.FLT_CARRIER):
+                label = f"[Carrier] {name}"
+            else:
+                label = name
+            response_data.append({
+                'gwgroupid': group.id,
+                'name': label,
+                'type': gtype,
+            })
+
+        return createApiResponse(msg='CDR groups found', data=response_data)
+    except Exception as ex:
+        db.rollback()
+        db.flush()
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
 @api.route("/api/v1/cdrs/endpointgroups/<int:gwgroupid>", methods=['GET'])
 @api_security
 def getGatewayGroupCDRS(gwgroupid=None):
     """
     Purpose
 
-    Getting the cdrs for a gatewaygroup
-
+    Getting the cdrs for a gatewaygroup. Use gwgroupid=0 for all calls.
     """
     if (settings.DEBUG):
         debugEndpoint()
@@ -3047,7 +3984,8 @@ def getGatewayCDRS(gwid=None):
     """
     Purpose
 
-    Getting the cdrs for a gateway thats part of a gateway group
+    Getting the cdrs for a gateway thats part of a gateway group.
+    Reads Kamailio acc INVITE records directly (duration from matching BYE).
 
     """
     db = DummySession()
@@ -3062,12 +4000,43 @@ def getGatewayCDRS(gwid=None):
             debugEndpoint()
 
         query = text(
-            "SELECT cdr_id, gwid, call_start_time, calltype AS direction, dst_username AS number,src_ip, dst_domain, duration,sip_call_id "
-            "FROM dr_gateways, cdrs "
-            "WHERE cdrs.src_ip=dr_gateways.address AND gwid=:gwid "
-            "ORDER BY call_start_time DESC"
+            """
+            SELECT
+                inv.id AS cdr_id,
+                gw.gwid,
+                inv.time AS call_start_time,
+                inv.calltype AS direction,
+                inv.dst_user AS number,
+                inv.src_ip,
+                inv.dst_domain,
+                COALESCE(
+                    TIMESTAMPDIFF(
+                        SECOND,
+                        inv.time,
+                        (
+                            SELECT bye.time
+                            FROM acc bye
+                            WHERE bye.method = 'BYE'
+                              AND bye.callid = inv.callid
+                              AND (
+                                    (bye.from_tag = inv.from_tag AND bye.to_tag = inv.to_tag)
+                                 OR (bye.from_tag = inv.to_tag AND bye.to_tag = inv.from_tag)
+                              )
+                            ORDER BY bye.time ASC
+                            LIMIT 1
+                        )
+                    ),
+                    0
+                ) AS duration,
+                inv.callid AS sip_call_id
+            FROM acc inv
+            JOIN dr_gateways gw ON inv.src_ip = gw.address
+            WHERE inv.method = 'INVITE'
+              AND gw.gwid = :gwid
+            ORDER BY inv.time DESC
+            """
         )
-        cdrs = db.execute(query, {'gwid':gwid})
+        cdrs = db.execute(query, {'gwid': gwid})
 
         rows = []
         for cdr in cdrs:

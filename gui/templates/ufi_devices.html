@@ -1,0 +1,141 @@
+{% extends 'table_layout.html' %}
+
+{% block title %}{{ _('UFI Devices') }}{% endblock %}
+
+{% block custom_css %}
+  {{ link_tag('onboarding') }}
+  {{ link_tag('ufi_devices') }}
+{% endblock %}
+
+{% block table_headers %}
+  <div>
+    <h3>{{ _('UFI Devices') }}</h3>
+  </div>
+{% endblock %}
+
+{% block table %}
+  <div class="ufi-config-panel">
+    <p class="text-muted">
+      {{ _('Power-on flow: UFI calls get-url for the platform base URL, then sip-setting. This page auto-opens the SIP account (user=IMEI, password=MD5(IMEI)[:16]) and returns the registrar.') }}
+    </p>
+    <form id="ufi-config-form" class="ufi-config-form">
+      <div class="form-row">
+        <div class="form-group col-md-3">
+          <label>{{ _('API secret') }}</label>
+          <input id="cfg_secret" class="form-control" type="text" autocomplete="off">
+        </div>
+        <div class="form-group col-md-2">
+          <label>{{ _('SIP host') }}</label>
+          <input id="cfg_sip_host" class="form-control" type="text">
+        </div>
+        <div class="form-group col-md-1">
+          <label>{{ _('SIP port') }}</label>
+          <input id="cfg_sip_port" class="form-control" type="number">
+        </div>
+        <div class="form-group col-md-2">
+          <label>{{ _('Transport') }}</label>
+          <select id="cfg_transport" class="form-control">
+            <option value="UDP">UDP</option>
+            <option value="TCP">TCP</option>
+          </select>
+        </div>
+        <div class="form-group col-md-2">
+          <label>{{ _('Auto provision') }}</label>
+          <select id="cfg_auto" class="form-control">
+            <option value="1">{{ _('On') }}</option>
+            <option value="0">{{ _('Off') }}</option>
+          </select>
+        </div>
+        <div class="form-group col-md-2 ufi-config-save">
+          <button type="submit" class="btn btn-success">{{ _('Save') }}</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group col-md-6">
+          <label>{{ _('Base URL') }} <small>(get-url)</small></label>
+          <input id="cfg_base_url" class="form-control" type="text" placeholder="https://host:5000/ufi-app">
+        </div>
+        <div class="form-group col-md-6">
+          <label>WebSocket URL</label>
+          <input id="cfg_ws_url" class="form-control" type="text">
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <table id="ufi-devices" class="table table-striped table-centered" style="width: 100%;">
+    <thead>
+    <tr>
+      <th>{{ _('IMEI') }}</th>
+      <th>{{ _('SIM') }}</th>
+      <th>LTE</th>
+      <th>VoLTE</th>
+      <th>{{ _('SIP') }}</th>
+      <th>{{ _('Signal') }}</th>
+      <th>{{ _('Network') }}</th>
+      <th>WS</th>
+      <th>{{ _('Last seen') }}</th>
+      <th>{{ _('Registered') }}</th>
+      <th></th>
+    </tr>
+    </thead>
+  </table>
+
+  <div class="modal fade" id="ufi-status-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title">{{ _('UFI status') }} — <span id="status-imei"></span></h4>
+          <button type="button" class="close" data-bs-dismiss="modal"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="modal-body">
+          <pre id="status-json" class="ufi-status-json"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="ufi-cmd-modal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title">{{ _('Send command') }} — <span id="cmd-imei"></span></h4>
+          <button type="button" class="close" data-bs-dismiss="modal"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="modal-body">
+          <form id="ufi-cmd-form">
+            <div class="form-group">
+              <label>{{ _('Command') }}</label>
+              <select id="cmd-name" class="form-control">
+                <option value="reboot">reboot</option>
+                <option value="restart_linphone">restart_linphone</option>
+                <option value="wifi_scan">wifi_scan</option>
+                <option value="wifi_on">wifi_on</option>
+                <option value="wifi_off">wifi_off</option>
+                <option value="wifi_connect">wifi_connect</option>
+                <option value="wificall_on">wificall_on</option>
+                <option value="wificall_off">wificall_off</option>
+                <option value="hotspot_on">hotspot_on</option>
+                <option value="hotspot_off">hotspot_off</option>
+              </select>
+            </div>
+            <div class="form-group cmd-extra d-none" id="cmd-wifi">
+              <label>SSID</label>
+              <input id="cmd-ssid" class="form-control" type="text">
+              <label>{{ _('Password') }}</label>
+              <input id="cmd-pass" class="form-control" type="text">
+            </div>
+            <div id="cmd-result" class="onboarding-result d-none"></div>
+            <div class="modal-footer">
+              <button type="submit" class="btn btn-success" style="width:100%">{{ _('Send') }}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block custom_js %}
+  {{ script_tag('ufi_devices') }}
+{% endblock %}

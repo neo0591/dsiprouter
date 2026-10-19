@@ -14,7 +14,9 @@ from copy import copy
 from functools import wraps
 from importlib import reload
 from flask import Flask, render_template, request, redirect, flash, session, url_for, send_from_directory, Blueprint, Response
+from flask_babel import gettext as _
 from flask_wtf.csrf import CSRFProtect
+from i18n import init_babel, SUPPORTED_LANGUAGES
 from itsdangerous import URLSafeTimedSerializer
 from pygtail import Pygtail
 from sqlalchemy import exc as sql_exceptions, Integer, or_
@@ -37,12 +39,16 @@ from modules.numbers.db.dsip_number import dSIPNumber
 from modules import flowroute
 from modules.domain.domain_routes import domains
 from modules.api.api_routes import api
+import modules.api.ufi_device  # UFI get-url / sip-setting device APIs
+import modules.api.ufi_comm  # UFI call-center comm-management APIs (ufi_pool overlay)
+import modules.api.ufi_sms  # UFI SMS Center APIs (pool as SMS channel)
+import modules.api.ufi_sms_gateway  # Open HTTP SMS gateway for third-party platforms
+import modules.api.ufi_whitelist  # IP whitelist for SMS API + carrier SIP对接
+import modules.api.acl as acl  # customers, roles, menu permissions
 from modules.api.carriergroups.routes import carriergroups, addCarrierGroups
 from modules.api.carriergroups.functions import addUpdateCarriers, displayCarrierGroups, displayCarriers
 from modules.api.kamailio.functions import reloadKamailio
-from modules.api.licensemanager.classes import WoocommerceError
-from modules.api.licensemanager.functions import licenseDictToStateDict, getLicenseStatusFromStateDict, \
-    getLicenseStatus
+from modules.api.licensemanager.functions import licenseDictToStateDict
 from modules.api.licensemanager.routes import license_manager
 from modules.api.outboundroutes.routes import outboundroutes
 from modules.api.auth.routes import user
@@ -78,7 +84,14 @@ UPGRADE_OFFSET = f'{UPGRADE_LOG}.offset'
 app = Flask(__name__, static_folder="./static", static_url_path="/static")
 if settings.DEBUG:
     app.config['EXPLAIN_TEMPLATE_LOADING'] = True
+# emit non-ASCII (e.g. Chinese) directly in JSON responses instead of \uXXXX escapes
+app.config['JSON_AS_ASCII'] = False
+try:
+    app.json.ensure_ascii = False
+except Exception:
+    pass
 app.logger.setLevel(logging.INFO)
+init_babel(app)
 app.register_blueprint(domains)
 app.register_blueprint(api)
 app.register_blueprint(carriergroups)
@@ -230,9 +243,11 @@ def require_permissions(required_groups):
         def wrapper(*args, **kwargs):
             if not session.get('logged_in'):
                 return render_template('index.html', version=settings.VERSION)
+            if session.get('is_platform_admin'):
+                return func(*args, **kwargs)
             user_groups = set(session.get('user_groups', []) or [])
             if not user_groups.intersection(required_groups):
-                flash('You do not have permission to access this page')
+                flash(_('You do not have permission to access this page'))
                 return redirect(url_for('index'))
             return func(*args, **kwargs)
         return wrapper
@@ -339,6 +354,13 @@ def login():
                 session['logged_in'] = True
                 session['username'] = form['username']
                 session['user_groups'] = ['dsip_admin']
+                try:
+                    _adb = startSession()
+                    acl.apply_session(acl.resolve_acl(_adb, form['username'], builtin=True))
+                    _adb.close()
+                except Exception:
+                    session['is_platform_admin'] = True
+                    session['menu_perms'] = list(acl.ALL_MENU_KEYS)
                 return redirect(_sanitize_nextpage(form.get('nextpage')))
        
         # Check for user in other auth modules
@@ -363,12 +385,16 @@ def login():
                     session['logged_in'] = True
                     session['username'] = form['username']
                     session['user_groups'] = getUserRoles(form['username'])
+                    try:
+                        acl.apply_session(acl.resolve_acl(db, form['username'], builtin=False))
+                    except Exception as acl_ex:
+                        debugException(acl_ex)
                     return redirect(_sanitize_nextpage(form.get('nextpage')))
         finally:
             db.close()
 
         # if we got here auth failed
-        flash('Wrong Username or Password')
+        flash(_('Wrong Username or Password'))
         return redirect(url_for('index'))
 
     except http_exceptions.HTTPException as ex:
@@ -389,6 +415,10 @@ def logout():
         session.pop('logged_in', None)
         session.pop('username', None)
         session.pop('user_groups', None)
+        session.pop('customer_id', None)
+        session.pop('customer_name', None)
+        session.pop('is_platform_admin', None)
+        session.pop('menu_perms', None)
         return redirect(url_for('index'))
 
     except http_exceptions.HTTPException as ex:
@@ -400,8 +430,20 @@ def logout():
         return showError(type=error)
 
 
+@app.route('/set_language/<lang>')
+def set_language(lang):
+    """Persist the user's language choice in the session and return to the previous page."""
+    if lang in SUPPORTED_LANGUAGES:
+        session['lang'] = lang
+
+    # Only allow relative redirects (same-origin) to avoid open redirects
+    next_url = request.args.get('next') or ''
+    if not next_url.startswith('/') or next_url.startswith('//'):
+        next_url = url_for('index')
+    return redirect(next_url)
+
+
 @app.route('/users')
-@require_permissions(['dsip_admin'])
 def users():
     """
     Display the multi-user management page (admin only).
@@ -412,6 +454,12 @@ def users():
     try:
         if settings.DEBUG:
             debugEndpoint()
+
+        if not session.get('logged_in'):
+            return redirect(url_for('index'))
+        if not (session.get('is_platform_admin') or acl.menu_allowed('sys.users') or acl.menu_allowed('sys.customers')):
+            flash('当前角色无权访问客户与权限')
+            return redirect(url_for('index'))
 
         db = startSession()
         try:
@@ -426,7 +474,7 @@ def users():
         finally:
             db.close()
 
-        return render_template('users.html', users=users_data, version=settings.VERSION)
+        return render_template('acl_admin.html', users=users_data, version=settings.VERSION)
 
     except http_exceptions.HTTPException as ex:
         debugException(ex)
@@ -621,6 +669,210 @@ def deleteCarriers():
         db.close()
 
 
+@app.route('/setup')
+def displaySetup():
+    """Guided UFI → dSIPRouter → VOS phone configuration."""
+    try:
+        if not session.get('logged_in'):
+            return render_template('index.html', version=settings.VERSION)
+        if settings.DEBUG:
+            debugEndpoint()
+        return render_template(
+            'setup.html',
+            dsiprouter_ip=settings.EXTERNAL_IP_ADDR,
+            DEFAULT_auth_domain=settings.DEFAULT_AUTH_DOMAIN,
+        )
+    except http_exceptions.HTTPException as ex:
+        debugException(ex)
+        return showError(type='http', code=ex.code, msg=ex.description)
+    except Exception as ex:
+        debugException(ex)
+        return showError(type='server')
+
+
+@app.route('/onboarding')
+def displayOnboarding():
+    """Parent page for customer account setup (开户)."""
+    try:
+        if not session.get('logged_in'):
+            return render_template('index.html', version=settings.VERSION)
+
+        if settings.DEBUG:
+            debugEndpoint()
+
+        return render_template(
+            'onboarding.html',
+            dsiprouter_ip=settings.EXTERNAL_IP_ADDR,
+            DEFAULT_auth_domain=settings.DEFAULT_AUTH_DOMAIN,
+        )
+    except http_exceptions.HTTPException as ex:
+        debugException(ex)
+        return showError(type='http', code=ex.code, msg=ex.description)
+    except Exception as ex:
+        debugException(ex)
+        return showError(type='server')
+
+
+@app.route('/ufi')
+def displayUfiDevices():
+    """UFI devices that auto-register via get-url / sip-setting."""
+    try:
+        if not session.get('logged_in'):
+            return render_template('index.html', version=settings.VERSION)
+        if settings.DEBUG:
+            debugEndpoint()
+        return render_template('ufi_console.html')
+    except http_exceptions.HTTPException as ex:
+        debugException(ex)
+        return showError(type='http', code=ex.code, msg=ex.description)
+    except Exception as ex:
+        debugException(ex)
+        return showError(type='server')
+
+
+@app.route('/ufi-callcenter')
+def displayUfiCallcenter():
+    """UFI call-center / comm-management console (device ledger linked by IMEI)."""
+    try:
+        if not session.get('logged_in'):
+            return render_template('index.html', version=settings.VERSION)
+        if settings.DEBUG:
+            debugEndpoint()
+        return render_template('ufi_callcenter.html')
+    except http_exceptions.HTTPException as ex:
+        debugException(ex)
+        return showError(type='http', code=ex.code, msg=ex.description)
+    except Exception as ex:
+        debugException(ex)
+        return showError(type='server')
+
+
+@app.route('/ufi-sms')
+def displayUfiSms():
+    """UFI SMS Center — send/campaign/template/blacklist via UFI pool channels."""
+    try:
+        if not session.get('logged_in'):
+            return render_template('index.html', version=settings.VERSION)
+        if settings.DEBUG:
+            debugEndpoint()
+        return render_template(
+            'ufi_sms.html',
+            ufi_sip_domain=(settings.EXTERNAL_IP_ADDR or settings.DEFAULT_AUTH_DOMAIN or '').strip())
+    except http_exceptions.HTTPException as ex:
+        debugException(ex)
+        return showError(type='http', code=ex.code, msg=ex.description)
+    except Exception as ex:
+        debugException(ex)
+        return showError(type='server')
+
+
+@app.route('/ufi-sms-sandbox')
+def displayUfiSmsSandbox():
+    """独立短信开放接口模拟对接页（不挂导航菜单，需登录）。"""
+    try:
+        if not session.get('logged_in'):
+            return render_template('index.html', version=settings.VERSION)
+        if settings.DEBUG:
+            debugEndpoint()
+        return render_template('ufi_sms_sandbox.html')
+    except http_exceptions.HTTPException as ex:
+        debugException(ex)
+        return showError(type='http', code=ex.code, msg=ex.description)
+    except Exception as ex:
+        debugException(ex)
+        return showError(type='server')
+
+
+HELP_CATALOG = [
+    {
+        'slug': 'ufi-vos',
+        'title': 'UFI × VOS3000 对接用户手册',
+        'desc': '运营商组、通信管理号码池、任意被叫、端到端链路与短信中心；含客户 VOS 配合清单与故障速查。',
+        'meta': '图文手册 · 四页面覆盖',
+        'tag': '对接',
+        'file': 'ufi-vos-manual.html',
+    },
+    {
+        'slug': 'ufi-onboarding',
+        'title': 'UFI 单机接入教程',
+        'desc': '设备上线、开户配置、注册测试与链路排查，适合新 UFI 首次接入。',
+        'meta': '开户 · 测试 · 排障',
+        'tag': '开户',
+        'file': 'ufi-onboarding.html',
+    },
+    {
+        'slug': 'sms-api',
+        'title': '开放短信 API 对接说明',
+        'desc': 'HTTP 短信网关：Bearer API Key、单发/批量/查询，供第三方平台对接。',
+        'meta': 'Gateway · /api/v1/sms',
+        'tag': 'API',
+        'file': 'sms-api.html',
+    },
+]
+
+
+def _helpDocBySlug(slug):
+    for doc in HELP_CATALOG:
+        if doc['slug'] == slug:
+            return doc
+    return None
+
+
+@app.route('/help')
+def displayHelpCenter():
+    """In-app help center hub for UFI / VOS operator manuals."""
+    try:
+        if not session.get('logged_in'):
+            return render_template('index.html', version=settings.VERSION)
+        if settings.DEBUG:
+            debugEndpoint()
+        return render_template('help.html', docs=HELP_CATALOG, active_doc=None, doc_url=None)
+    except http_exceptions.HTTPException as ex:
+        debugException(ex)
+        return showError(type='http', code=ex.code, msg=ex.description)
+    except Exception as ex:
+        debugException(ex)
+        return showError(type='server')
+
+
+@app.route('/help/<slug>')
+def displayHelpDoc(slug):
+    """Render a help document in the help-center viewer."""
+    try:
+        if not session.get('logged_in'):
+            return render_template('index.html', version=settings.VERSION)
+        if settings.DEBUG:
+            debugEndpoint()
+        doc = _helpDocBySlug(slug)
+        if doc is None:
+            return showError(type='http', code=404, msg='Help document not found')
+        doc_url = url_for('static', filename='help/{}'.format(doc['file']))
+        return render_template('help.html', docs=HELP_CATALOG, active_doc=doc, doc_url=doc_url)
+    except http_exceptions.HTTPException as ex:
+        debugException(ex)
+        return showError(type='http', code=ex.code, msg=ex.description)
+    except Exception as ex:
+        debugException(ex)
+        return showError(type='server')
+
+
+@app.route('/phones')
+def displayPhones():
+    """Business management: PBX/VOS phones and DID lists."""
+    try:
+        if not session.get('logged_in'):
+            return render_template('index.html', version=settings.VERSION)
+        if settings.DEBUG:
+            debugEndpoint()
+        return render_template('phones.html')
+    except http_exceptions.HTTPException as ex:
+        debugException(ex)
+        return showError(type='http', code=ex.code, msg=ex.description)
+    except Exception as ex:
+        debugException(ex)
+        return showError(type='server')
+
+
 @app.route('/endpointgroups')
 def displayEndpointGroups():
     """
@@ -674,7 +926,7 @@ def displayNumberEnrichment():
 @app.route('/cdrs')
 def displayCDRS():
     """
-    Display Endpoint Groups / Endpoints in the view
+    Display Call Detail Records in the view
     """
     try:
         if not session.get('logged_in'):
@@ -682,17 +934,6 @@ def displayCDRS():
 
         if (settings.DEBUG):
             debugEndpoint()
-
-        license_status = getLicenseStatus(license_tag='DSIP_CORE')
-        if license_status == 0:
-            return render_template('license_required.html', msg='DSIP_CORE license is required to use this feature')
-
-        if license_status == 1:
-            return render_template('license_required.html', msg='license is not valid, ensure your license is still active')
-
-        if license_status == 2:
-            return render_template('license_required.html', msg='license is associated with another machine, re-associate it with this machine first')
-
 
         return render_template('cdrs.html')
 
@@ -1678,23 +1919,11 @@ def displayTransNexus(msg=None):
         if (settings.DEBUG):
             debugEndpoint()
 
-        license_status = getLicenseStatus(license_tag='DSIP_TRANSNEXUS')
-        if license_status == 0:
-            return render_template('license_required.html', msg=None)
-
-        if license_status == 1:
-            return render_template('license_required.html', msg='license is not valid, ensure your license is still active')
-
-        if license_status == 2:
-            return render_template('license_required.html', msg='license is associated with another machine, re-associate it with this machine first')
-
         return render_template(
             'transnexus.html',
             msg=msg
         )
 
-    except WoocommerceError as ex:
-        return render_template('license_required.html', msg=str(ex))
     except http_exceptions.HTTPException as ex:
         debugException(ex)
         return showError(type='http', code=ex.code, msg=ex.description)
@@ -1716,16 +1945,6 @@ def addUpdateTransNexus():
 
         if (settings.DEBUG):
             debugEndpoint()
-
-        license_status = getLicenseStatus(license_tag='DSIP_TRANSNEXUS')
-        if license_status == 0:
-            return render_template('license_required.html', msg=None)
-
-        if license_status == 1:
-            return render_template('license_required.html', msg='license is not valid, ensure your license is still active')
-
-        if license_status == 2:
-            return render_template('license_required.html', msg='license is associated with another machine, re-associate it with this machine first')
 
         form = stripDictVals(request.form.to_dict())
 
@@ -1750,8 +1969,6 @@ def addUpdateTransNexus():
 
         return displayTransNexus()
 
-    except WoocommerceError as ex:
-        return render_template('license_required.html', msg=str(ex))
     except http_exceptions.HTTPException as ex:
         debugException(ex)
         return showError(type='http', code=ex.code, msg=ex.description)
@@ -2057,7 +2274,7 @@ def deleteOutboundRoute():
 @app.route('/stirshaken')
 def displayStirShaken(msg=None):
     """
-    Display TransNexus settings in view
+    Display STIR/SHAKEN settings in view
     """
 
     try:
@@ -2066,16 +2283,6 @@ def displayStirShaken(msg=None):
 
         if (settings.DEBUG):
             debugEndpoint()
-
-        license_status = getLicenseStatus(license_tag='DSIP_STIRSHAKEN')
-        if license_status == 0:
-            return render_template('license_required.html', msg=None)
-
-        if license_status == 1:
-            return render_template('license_required.html', msg='license is not valid, ensure your license is still active')
-
-        if license_status == 2:
-            return render_template('license_required.html', msg='license is associated with another machine, re-associate it with this machine first')
 
         if settings.STIR_SHAKEN_ENABLED == 1:
             toggle_checked = 'checked'
@@ -2091,8 +2298,6 @@ def displayStirShaken(msg=None):
             options_hidden=options_hidden
         )
 
-    except WoocommerceError as ex:
-        return render_template('license_required.html', msg=str(ex))
     except http_exceptions.HTTPException as ex:
         debugException(ex)
         return showError(type='http', code=ex.code, msg=ex.description)
@@ -2114,16 +2319,6 @@ def addUpdateStirShaken():
 
         if (settings.DEBUG):
             debugEndpoint()
-
-        license_status = getLicenseStatus(license_tag='DSIP_STIRSHAKEN')
-        if license_status == 0:
-            return render_template('license_required.html', msg=None)
-
-        if license_status == 1:
-            return render_template('license_required.html', msg='license is not valid, ensure your license is still active')
-
-        if license_status == 2:
-            return render_template('license_required.html', msg='license is associated with another machine, re-associate it with this machine first')
 
         form = stripDictVals(request.form.to_dict())
 
@@ -2157,8 +2352,6 @@ def addUpdateStirShaken():
 
         return displayStirShaken()
 
-    except WoocommerceError as ex:
-        return render_template('license_required.html', msg=str(ex))
     except http_exceptions.HTTPException as ex:
         debugException(ex)
         return showError(type='http', code=ex.code, msg=ex.description)
@@ -2181,14 +2374,6 @@ def displayUpgrade(msg=None):
         if (settings.DEBUG):
             debugEndpoint()
 
-        license_status = getLicenseStatus(license_tag='DSIP_CORE')
-        if license_status == 0:
-            return render_template('license_required.html', msg=None)
-        if license_status == 1:
-            return render_template('license_required.html', msg='license is not valid, ensure your license is still active')
-        if license_status == 2:
-            return render_template('license_required.html', msg='license is associated with another machine, re-associate it with this machine first')
-
         # make sure we remove offset file when navigating to top level page
         if os.path.exists(UPGRADE_OFFSET):
             os.remove(UPGRADE_OFFSET)
@@ -2202,8 +2387,6 @@ def displayUpgrade(msg=None):
         }
         return render_template('upgrade.html', upgrade_settings=upgrade_settings, msg=msg)
 
-    except WoocommerceError as ex:
-        return render_template('license_required.html', msg=str(ex))
     except http_exceptions.HTTPException as ex:
         debugException(ex)
         return showError(type='http', code=ex.code, msg=ex.description)
@@ -2244,9 +2427,6 @@ def startUpgrade():
 
         if (settings.DEBUG):
             debugEndpoint()
-
-        if getLicenseStatus(license_tag='DSIP_CORE') != 3:
-            raise WoocommerceError('invalid license')
 
         IO.loginfo("starting upgrade")
 
@@ -2431,10 +2611,27 @@ def injectGlobals():
     return {
         'settings': settings,
         'state': state,
-        'licenseValid': lambda tag: getLicenseStatusFromStateDict(state['dsip_license_store'], tag),
+        'licenseValid': lambda tag: True,
         'dynamicModules': dynamicModules,
-        'user_groups': session.get('user_groups', [])
+        'user_groups': session.get('user_groups', []),
+        'menu_perms': session.get('menu_perms') or [],
+        'is_platform_admin': bool(session.get('is_platform_admin')),
+        'customer_name': session.get('customer_name') or '',
+        'menu_ok': acl.menu_allowed,
     }
+
+
+@app.before_request
+def _acl_guard():
+    if not session.get('logged_in'):
+        return None
+    path = request.path or '/'
+    if path.startswith('/static') or path.startswith('/api/') or path.startswith('/ufi-app'):
+        return None
+    if not acl.path_allowed(path):
+        flash('当前角色无权访问该菜单')
+        return redirect(url_for('index'))
+    return None
 
 
 # DEPRECATED: now done by dsiprouter.sh (CLI commands run by dsip-init.service), marked for removal in v0.80
@@ -2581,17 +2778,15 @@ def replaceAppLoggers(log_handler):
         logging.getLogger('sqlalchemy').removeHandler(handler)
         handler.close()
 
-    # replace vanilla werkzeug and sqlalchemy log handler
+    # App request log follows the mapped level. SQLAlchemy stays at WARNING so
+    # every query/pool checkout does not fill /var/log/dsiprouter.log.
+    from sysloginit import py_log_level
+    app_level = py_log_level()
     logging.getLogger('werkzeug').addHandler(log_handler)
-    logging.getLogger('werkzeug').setLevel(settings.DSIP_LOG_LEVEL)
-    logging.getLogger('sqlalchemy.engine').addHandler(log_handler)
-    logging.getLogger('sqlalchemy.engine').setLevel(settings.DSIP_LOG_LEVEL)
-    logging.getLogger('sqlalchemy.dialects').addHandler(log_handler)
-    logging.getLogger('sqlalchemy.dialects').setLevel(settings.DSIP_LOG_LEVEL)
-    logging.getLogger('sqlalchemy.pool').addHandler(log_handler)
-    logging.getLogger('sqlalchemy.pool').setLevel(settings.DSIP_LOG_LEVEL)
-    logging.getLogger('sqlalchemy.orm').addHandler(log_handler)
-    logging.getLogger('sqlalchemy.orm').setLevel(settings.DSIP_LOG_LEVEL)
+    logging.getLogger('werkzeug').setLevel(app_level)
+    for name in ('sqlalchemy.engine', 'sqlalchemy.dialects', 'sqlalchemy.pool', 'sqlalchemy.orm'):
+        logging.getLogger(name).addHandler(log_handler)
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def intializeGlobalSettings():
@@ -2734,15 +2929,17 @@ def initApp(flask_app):
     flask_app.json_encoder = CreateEncoder()
 
     # Set session / cookie options
+    # Secure=False so HTTP+HTTPS dual access works (Secure cookies are dropped by browsers on http://)
     flask_app.config.update(
         SESSION_PROTECTION='strong',
-        SESSION_COOKIE_SECURE=True,
+        SESSION_COOKIE_SECURE=False,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Lax',
-        REMEMBER_COOKIE_SECURE=True,
+        REMEMBER_COOKIE_SECURE=False,
         REMEMBER_COOKIE_HTTPONLY=True,
         REMEMBER_COOKIE_DURATION=datetime.timedelta(minutes=settings.GUI_INACTIVE_TIMEOUT),
         PERMANENT_SESSION_LIFETIME=datetime.timedelta(minutes=settings.GUI_INACTIVE_TIMEOUT),
+        WTF_CSRF_SSL_STRICT=False,
     )
 
     # Setup ProxyFix middleware
@@ -2769,6 +2966,12 @@ def initApp(flask_app):
 
     # Initialize authentication modules
     intializeAuthModules()
+
+    try:
+        from modules.api.ufi_ws import start_ufi_ws_server
+        start_ufi_ws_server()
+    except Exception as ex:
+        IO.logerr('UFI websocket server failed to start: {}'.format(ex))
 
     # write out the main proc's PID
     with open(settings.DSIP_PID_FILE, 'w') as pidfd:

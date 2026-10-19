@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UFI × VOS3000 对接用户手册 — dSIPRouter 管理台</title>
+<style>
+:root{
+  --bg:#f4f6f9; --card:#fff; --ink:#1c2430; --ink2:#5a6572; --line:#e4e8ee;
+  --brand:#e8842c; --brand-bg:#fdf3e7; --ok:#1e9e6a; --ok-bg:#e8f7f0;
+  --warn:#c2651a; --warn-bg:#fdf1e3; --err:#c0392b; --err-bg:#fbeeec;
+  --blue:#2563eb; --blue-bg:#eaf1fd; --purple:#6d28d9; --purple-bg:#f3eefa;
+  --code:#f1f3f6; --mono:'Cascadia Code',Consolas,'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:15px/1.75 -apple-system,'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--ink);padding:36px 16px}
+.page{max-width:980px;margin:0 auto}
+header.hero{background:linear-gradient(135deg,#1e2a3d 0%,#31435f 55%,#3d4f6a 100%);color:#fff;border-radius:16px;padding:40px 42px;margin-bottom:26px;position:relative;overflow:hidden}
+header.hero::after{content:'';position:absolute;right:-40px;top:-40px;width:220px;height:220px;border-radius:50%;background:rgba(232,132,44,.18)}
+header.hero h1{font-size:28px;margin-bottom:10px;position:relative}
+header.hero p{color:#b9c4d4;font-size:14.5px;max-width:720px;position:relative}
+.meta{display:flex;gap:16px;margin-top:16px;font-size:12.5px;color:#93a1b5;flex-wrap:wrap;position:relative}
+.meta a{color:#ffc48a;text-decoration:none}
+.meta a:hover{text-decoration:underline}
+.toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 26px;margin-bottom:26px}
+.toc b{font-size:15px}
+.toc ol{margin:10px 0 0 20px;columns:2;column-gap:36px;font-size:14px}
+.toc a{color:var(--blue);text-decoration:none}
+.toc a:hover{text-decoration:underline}
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:16px 0}
+@media(max-width:720px){.cards{grid-template-columns:1fr}.toc ol{columns:1}}
+.card-link{display:block;border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:linear-gradient(180deg,#fff,#fafbfd);text-decoration:none;color:inherit;transition:.15s}
+.card-link:hover{border-color:#f0b06a;box-shadow:0 4px 14px rgba(232,132,44,.12)}
+.card-link .tag{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--brand-bg);color:var(--brand);font-weight:600}
+.card-link h3{font-size:15.5px;margin:8px 0 4px}
+.card-link p{font-size:13px;color:var(--ink2);margin:0}
+.card-link code{font-size:11.5px}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:30px 36px;margin-bottom:22px}
+h2{font-size:20px;padding-bottom:10px;border-bottom:2px solid var(--brand);margin-bottom:18px;display:flex;align-items:center;gap:10px}
+h2 .no{background:var(--brand);color:#fff;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+h3{font-size:16px;margin:22px 0 10px;color:#2a3546}
+h4{font-size:14.5px;margin:16px 0 8px;color:#3a4658}
+p{margin:8px 0}
+ul,ol{margin:8px 0 8px 22px}
+li{margin:4px 0}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+th{background:#f0f3f7;text-align:left;padding:9px 12px;border:1px solid var(--line);font-weight:600}
+td{padding:9px 12px;border:1px solid var(--line);vertical-align:top}
+tr:nth-child(even) td{background:#fafbfc}
+code{font-family:var(--mono);font-size:12.5px;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+pre{background:#22304a;color:#d7e2f0;border-radius:10px;padding:16px 20px;overflow-x:auto;font-size:12.5px;line-height:1.6;margin:12px 0;font-family:var(--mono)}
+pre b{color:#ffb35c}
+.tip,.warn,.danger,.info{border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13.5px}
+.tip{background:var(--ok-bg);border-left:4px solid var(--ok)}
+.warn{background:var(--warn-bg);border-left:4px solid var(--warn)}
+.danger{background:var(--err-bg);border-left:4px solid var(--err)}
+.info{background:var(--blue-bg);border-left:4px solid var(--blue)}
+.badge{display:inline-block;font-size:11.5px;padding:1px 9px;border-radius:99px;margin:0 2px}
+.b-ok{background:var(--ok-bg);color:var(--ok)}
+.b-warn{background:var(--warn-bg);color:var(--warn)}
+.b-ours{background:var(--blue-bg);color:var(--blue)}
+.b-client{background:var(--purple-bg);color:var(--purple)}
+.fig{margin:20px 0;text-align:center}
+.fig svg,.fig .wire{max-width:100%;height:auto;background:#fbfcfe;border:1px solid var(--line);border-radius:12px}
+.fig img.shot{display:block;width:100%;max-width:100%;height:auto;border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 20px rgba(28,36,48,.08)}
+.figcap{font-size:12.5px;color:var(--ink2);margin-top:8px}
+.steps{counter-reset:st;margin:14px 0;padding:0}
+.steps>li{list-style:none;counter-increment:st;position:relative;padding-left:44px;margin:16px 0}
+.steps>li::before{content:counter(st);position:absolute;left:0;top:2px;width:28px;height:28px;border-radius:50%;background:var(--brand-bg);color:var(--brand);font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--brand)}
+.wire{display:block;padding:18px;text-align:left;font-size:12.5px}
+.wire .bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px dashed var(--line)}
+.wire .tab{padding:4px 10px;border-radius:6px;background:#eef1f5;color:#445;font-size:12px}
+.wire .tab.on{background:var(--brand);color:#fff;font-weight:600}
+.wire .row{display:grid;gap:10px;margin:10px 0}
+.wire .kpis{grid-template-columns:repeat(4,1fr)}
+.wire .kpi{background:#f5f7fa;border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center}
+.wire .kpi b{display:block;font-size:18px;font-family:var(--mono);color:var(--brand)}
+.wire .kpi span{font-size:11px;color:var(--ink2)}
+.wire .flow{display:flex;align-items:stretch;gap:6px;overflow-x:auto;padding:4px 0}
+.wire .node{min-width:120px;flex:1;border:1.5px solid var(--line);border-radius:10px;padding:10px;background:#fff}
+.wire .node.ours{border-color:#93c5fd;background:#f0f7ff}
+.wire .node.client{border-style:dashed;border-color:#c4b5fd;background:#faf5ff}
+.wire .node h5{font-size:12.5px;margin:0 0 4px}
+.wire .node p{font-size:11px;color:var(--ink2);margin:0;line-height:1.45}
+.wire .arr{align-self:center;color:#8a97a8;font-size:16px;flex:none}
+.wire .tbl{width:100%;font-size:11.5px;margin-top:8px}
+.wire .tbl th{background:#eef2f7;padding:6px 8px}
+.wire .tbl td{padding:6px 8px;border-color:#e8ecf1}
+.chk{list-style:none;margin-left:4px}
+.chk li{margin:6px 0}
+.chk li::before{content:'☐ ';color:var(--brand);font-size:16px}
+.flow-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:12px;font-weight:700;margin-right:6px}
+footer{text-align:center;color:var(--ink2);font-size:12.5px;padding:12px 0 36px}
+@media print{body{padding:0;background:#fff}section{break-inside:avoid;border:none}header.hero{break-after:avoid}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="hero">
+  <h1>UFI × VOS3000 对接用户手册</h1>
+  <p>指导管理员在 dSIPRouter 管理台完成运营商对接、UFI 号码池、外呼任意号码、短信通道等配置。覆盖四个主页面，并说明客户 VOS3000 侧需配合的操作。</p>
+  <div class="meta">
+    <span>🖥 管理台 <a href="https://ufi.mineo.top/" target="_blank">ufi.mineo.top</a></span>
+    <span>📦 版本 dSIPRouter 0.792+</span>
+    <span>📅 2026-10-11</span>
+    <span>🔗 通话：手机 → UFI → dSIP → VOS → 坐席</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#map">四个主页面一览</a></li>
+    <li><a href="#arch">链路与职责划分</a></li>
+    <li><a href="#order">推荐配置顺序</a></li>
+    <li><a href="#carrier">页面 A：运营商组</a></li>
+    <li><a href="#callcenter">页面 B：通信管理（通话）</a></li>
+    <li><a href="#topo">页面 C：端到端链路总览</a></li>
+    <li><a href="#sms">页面 D：短信中心</a></li>
+    <li><a href="#vos">客户 VOS3000 配合清单</a></li>
+    <li><a href="#accept">联调验收</a></li>
+    <li><a href="#trouble">故障速查</a></li>
+  </ol>
+</nav>
+
+<!-- 1 -->
+<section id="map">
+  <h2><span class="no">1</span>四个主页面一览</h2>
+  <p>登录 <code>https://ufi.mineo.top/</code> 后，以下四个入口覆盖「对接 VOS + 管 UFI 通话/短信」的日常工作：</p>
+  <div class="cards">
+    <a class="card-link" href="https://ufi.mineo.top/carriergroups" target="_blank">
+      <span class="tag">页面 A · 我方</span>
+      <h3>运营商组</h3>
+      <p>登记客户 VOS3000 为 type=8 网关（IP 认证）。多 VOS 时每个系统一条。</p>
+      <p style="margin-top:6px"><code>/carriergroups</code></p>
+    </a>
+    <a class="card-link" href="https://ufi.mineo.top/ufi-callcenter" target="_blank">
+      <span class="tag">页面 B · 我方</span>
+      <h3>通信管理</h3>
+      <p>号码池、选路策略、触发号、任意被叫绑定 VOS、设备入池、号码映射。</p>
+      <p style="margin-top:6px"><code>/ufi-callcenter</code></p>
+    </a>
+    <a class="card-link" href="https://ufi.mineo.top/ufi-callcenter#topo" target="_blank">
+      <span class="tag">页面 C · 监控</span>
+      <h3>端到端链路</h3>
+      <p>通信管理默认「线路总览」：实时看注册、池、VOS 认证、路由一致性。</p>
+      <p style="margin-top:6px"><code>/ufi-callcenter#topo</code></p>
+    </a>
+    <a class="card-link" href="https://ufi.mineo.top/ufi-sms" target="_blank">
+      <span class="tag">页面 D · 短信</span>
+      <h3>短信中心</h3>
+      <p>经 UFI 池发 SIP MESSAGE / 群发任务、模板、黑名单与频控。</p>
+      <p style="margin-top:6px"><code>/ufi-sms</code></p>
+    </a>
+  </div>
+  <div class="info"><b>权限说明：</b>标 <span class="badge b-ours">我方</span> 的页面可直接改 dSIPRouter；标 <span class="badge b-client">客户</span> 的 VOS 配置由客户管理员操作，我方只出指引单并验收。</div>
+</section>
+
+<!-- 2 -->
+<section id="arch">
+  <h2><span class="no">2</span>链路与职责划分</h2>
+  <div class="fig">
+  <svg viewBox="0 0 920 280" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI','Microsoft YaHei',sans-serif">
+    <defs>
+      <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#8a97a8"/></marker>
+      <marker id="aro" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#e8842c"/></marker>
+    </defs>
+    <text x="460" y="28" text-anchor="middle" fill="#5a6572" font-size="13">坐席外呼任意号码（生产通配）</text>
+    <rect x="20" y="50" width="120" height="72" rx="10" fill="#eaf1fd" stroke="#2563eb"/>
+    <text x="80" y="80" text-anchor="middle" font-weight="700" fill="#1d4ed8" font-size="13">坐席话机</text>
+    <text x="80" y="100" text-anchor="middle" fill="#5a6572" font-size="11">客户 VOS 分机</text>
+    <rect x="180" y="50" width="140" height="72" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-dasharray="5 3"/>
+    <text x="250" y="78" text-anchor="middle" font-weight="700" fill="#6d28d9" font-size="13">VOS3000</text>
+    <text x="250" y="96" text-anchor="middle" fill="#5a6572" font-size="11">前缀通配 → dsip接入</text>
+    <text x="250" y="112" text-anchor="middle" fill="#8b5cf6" font-size="10">客户资产</text>
+    <rect x="360" y="44" width="170" height="84" rx="10" fill="#fff" stroke="#1c2430" stroke-width="1.8"/>
+    <text x="445" y="72" text-anchor="middle" font-weight="700" font-size="13">dSIPRouter</text>
+    <text x="445" y="90" text-anchor="middle" fill="#5a6572" font-size="11">选池 · X-VOLTE</text>
+    <text x="445" y="108" text-anchor="middle" fill="#2563eb" font-size="10">我方 · /ufi-callcenter</text>
+    <rect x="570" y="50" width="150" height="72" rx="10" fill="#fdf3e7" stroke="#e8842c"/>
+    <text x="645" y="78" text-anchor="middle" font-weight="700" fill="#c2651a" font-size="13">UFI 池</text>
+    <text x="645" y="96" text-anchor="middle" fill="#5a6572" font-size="11">R-URI=IMEI</text>
+    <text x="645" y="112" text-anchor="middle" fill="#5a6572" font-size="11">VoLTE 打出</text>
+    <rect x="760" y="50" width="130" height="72" rx="10" fill="#e8f7f0" stroke="#1e9e6a"/>
+    <text x="825" y="80" text-anchor="middle" font-weight="700" fill="#147a52" font-size="13">被叫手机</text>
+    <text x="825" y="100" text-anchor="middle" fill="#5a6572" font-size="11">任意长号</text>
+    <line x1="140" y1="86" x2="178" y2="86" stroke="#8a97a8" stroke-width="1.6" marker-end="url(#ar)"/>
+    <line x1="320" y1="86" x2="358" y2="86" stroke="#8a97a8" stroke-width="1.6" marker-end="url(#ar)"/>
+    <line x1="530" y1="86" x2="568" y2="86" stroke="#e8842c" stroke-width="1.8" marker-end="url(#aro)"/>
+    <line x1="720" y1="86" x2="758" y2="86" stroke="#e8842c" stroke-width="1.8" marker-end="url(#aro)"/>
+    <text x="460" y="170" text-anchor="middle" fill="#5a6572" font-size="12">选池规则：精确触发号 → _DEFAULT_&lt;VOS_gwid&gt; → 全局兜底</text>
+    <rect x="80" y="195" width="200" height="56" rx="8" fill="#eaf1fd" stroke="#93c5fd"/>
+    <text x="180" y="218" text-anchor="middle" font-size="12" font-weight="600" fill="#1d4ed8">运营商组</text>
+    <text x="180" y="236" text-anchor="middle" font-size="11" fill="#5a6572">登记 VOS IP = gwid</text>
+    <rect x="320" y="195" width="240" height="56" rx="8" fill="#fdf3e7" stroke="#f0b06a"/>
+    <text x="440" y="218" text-anchor="middle" font-size="12" font-weight="600" fill="#c2651a">通信管理 · 号码池</text>
+    <text x="440" y="236" text-anchor="middle" font-size="11" fill="#5a6572">池 ↔ VOS 任意被叫绑定</text>
+    <rect x="600" y="195" width="220" height="56" rx="8" fill="#e8f7f0" stroke="#6ee7b7"/>
+    <text x="710" y="218" text-anchor="middle" font-size="12" font-weight="600" fill="#147a52">短信中心</text>
+    <text x="710" y="236" text-anchor="middle" font-size="11" fill="#5a6572">同池 UFI 作短信通道</text>
+  </svg>
+  <div class="figcap">图 1 · 生产外呼数据面与四个管理页面的对应关系</div>
+  </div>
+  <table>
+    <tr><th>角色</th><th>系统</th><th>典型操作</th></tr>
+    <tr><td><span class="badge b-ours">我方</span></td><td>dSIPRouter</td><td>运营商组、号码池、设备入池、IP 认证 address、短信任务</td></tr>
+    <tr><td><span class="badge b-client">客户</span></td><td>VOS3000</td><td>路由网关「dsip接入」前缀通配、话机 DIDs、坐席示闲</td></tr>
+  </table>
+</section>
+
+<!-- 3 -->
+<section id="order">
+  <h2><span class="no">3</span>推荐配置顺序</h2>
+  <ol class="steps">
+    <li>
+      <b>运营商组</b> — 添加客户 VOS（type=8，gwid≥100，填公网 SIP IP）。保存后 <b>重载 Kamailio</b>。
+    </li>
+    <li>
+      <b>通信管理 → UFI 通信配置</b> — 确认设备已纳管；划入号码池；设置策略；绑定「任意被叫 ← 对接 VOS」。
+    </li>
+    <li>
+      <b>客户 VOS</b> — 路由网关「dsip接入」前缀改为 <code>0,1,400,800,9</code>（勿逐号）；网关组不能为空。
+    </li>
+    <li>
+      <b>端到端链路 #topo</b> — 核对注册数、IP 认证、任意被叫绑定、路由一致性为绿。
+    </li>
+    <li>
+      <b>拨测</b> — 坐席拨未单独配置过的手机号；CDR 被叫经由=dsip接入且非 500。
+    </li>
+    <li>
+      <b>（可选）短信中心</b> — 同池设备作通道，配置模板/频控后单发验收。
+    </li>
+  </ol>
+</section>
+
+<!-- 4 Carrier -->
+<section id="carrier">
+  <h2><span class="no">4</span>页面 A：运营商组 <code>/carriergroups</code></h2>
+  <p>侧栏 <b>运营商组</b>。把客户 VOS3000 登记为 dSIP 可信任的运营商网关，供 UFI 落地与外呼进线识别。</p>
+
+  <div class="fig">
+    <img class="shot" src="images/manual/05-carrier-vos.png" alt="运营商组列表 · 搜索 VOS">
+    <div class="figcap">图 2 · 现网截图：搜索「VOS」可见 <b>VOS3000 Carrier Group</b>（ID 100，运营商 100,141）。列表中的编号即通信管理「任意被叫」里的 gwid。</div>
+  </div>
+
+  <h3>4.1 新增一台 VOS</h3>
+  <ol class="steps">
+    <li>打开 <a href="https://ufi.mineo.top/carriergroups" target="_blank">运营商组</a>，点 <b>添加</b>。</li>
+    <li>填写组名（如 <code>VOS3000 Carrier</code>）。</li>
+    <li>在组内添加终端：<b>主机/IP</b> = VOS 公网 SIP 地址；认证方式选 <b>IP 认证</b>（不要 SIP 摘要，除非客户要求）。</li>
+    <li>保存后到右上角执行 <b>重载 → 重载 Kamailio</b>。</li>
+    <li>到通信管理确认该 gwid 出现在「任意被叫 ← 对接 VOS」列表中。</li>
+  </ol>
+  <div class="warn"><b>注意：</b>系统样例网关 gwid 1–55 不要当生产 VOS 用。生产 VOS 使用 <b>type=8 且 gwid≥100</b>（如 100、101）。IP 变更后务必同步改 address 放行（port=0 表示任意源端口）。</div>
+
+  <h3>4.2 多 VOS</h3>
+  <p>每套 VOS 建一个运营商组/网关。通信管理里：P1 勾选 VOS#100，P2 勾选 VOS#101；各池 UFI 设备的 <b>carrier</b> 选同一 gwid。</p>
+</section>
+
+<!-- 5 Callcenter -->
+<section id="callcenter">
+  <h2><span class="no">5</span>页面 B：通信管理 <code>/ufi-callcenter</code></h2>
+  <p>侧栏 <b>营业管理 → 通信管理</b>。顶部 Tab：</p>
+  <table>
+    <tr><th>Tab</th><th>用途</th></tr>
+    <tr><td>线路总览</td><td>见第 6 章（#topo）</td></tr>
+    <tr><td><b>UFI 通信配置</b></td><td>号码池、策略、触发号、任意被叫、设备台账</td></tr>
+    <tr><td>号码与路由</td><td>dbaliases 绑定、VOS 前缀指引、路由一致性</td></tr>
+    <tr><td>链路诊断</td><td>排障速查</td></tr>
+    <tr><td>变更任务</td><td>我方待办 / 客户指引单</td></tr>
+    <tr><td>对接参数</td><td>快照与参数说明</td></tr>
+  </table>
+
+  <h3>5.1 号码池与设备</h3>
+  <div class="fig">
+    <img class="shot" src="images/manual/03-pool.png" alt="UFI 通信配置 · 选路现状与号码池">
+    <div class="figcap">图 3 · 现网截图：<b>UFI 通信配置</b> — 上方为选路现状（路由同步一致），下方为号码池列表。选中一行后可改策略，并点「编辑触发号 / 任意被叫」。</div>
+  </div>
+
+  <ol class="steps">
+    <li><b>新建号码池</b>（可选）：池 ID 如 <code>P2</code>，选策略（轮询 / 主备 / 负载）。</li>
+    <li><b>设备入池</b>：在下方设备台账勾选 UFI，划入目标池，确认 <b>enabled + in_pool</b>，<b>carrier</b> = 对应 VOS gwid。</li>
+    <li>打开 <b>编辑触发号 / 任意被叫</b>：
+      <ul>
+        <li><b>外呼触发号</b>：精确 Request-URI 命中才进池（逗号分隔；保存=整表覆盖；留空=清空）。</li>
+        <li><b>任意被叫 ← 对接 VOS</b>：勾选本池服务的 VOS gwid。该 VOS 通配打来的任意长号进本池。</li>
+        <li><b>全局兜底</b>：仅当源 IP 认不出 VOS 时使用，一般不勾。</li>
+      </ul>
+    </li>
+  </ol>
+  <div class="tip"><b>生产任意号码：</b>不必给每个被叫加触发号。VOS 前缀通配 + 本池勾选对应 VOS「任意被叫」即可。触发号只用于「打固定号码进指定池」的场景。</div>
+
+  <h3>5.2 号码与路由 Tab</h3>
+  <ul>
+    <li><b>外呼指定线路 / 呼入 SIM</b>：维护 <code>dbaliases</code>（别名 → IMEI）。</li>
+    <li>使用「生成客户指引单」让客户改 VOS 话机 DIDs、网关前缀。</li>
+    <li>可执行 <b>同步路由</b>：校准 <code>dr_rules</code> / <code>subscriber</code> 与号码池一致。</li>
+  </ul>
+
+  <h3>5.3 开户向导（通信配置内）</h3>
+  <p>可用「新增通信配置向导」：选 IMEI、SIM、池、carrier → 一键入池并同步路由。设备也可在 <b>UFI 设备</b> 模块上电自动纳管后再来划池。</p>
+</section>
+
+<!-- 6 Topo -->
+<section id="topo">
+  <h2><span class="no">6</span>页面 C：端到端链路 <code>/ufi-callcenter#topo</code></h2>
+  <p>通信管理打开后默认即本页。数据来自实时接口 <code>/api/v1/ufi/comm/topo</code>，与运营商组、号码池、设备注册联动（约 10 秒刷新）。</p>
+
+  <div class="fig">
+    <img class="shot" src="images/manual/01-topo.png" alt="线路总览 KPI">
+    <div class="figcap">图 4a · 现网截图：线路总览 KPI（纳管 / 注册 / 池内可用 / VoLTE / 并发 / DID 映射）</div>
+  </div>
+  <div class="fig">
+    <img class="shot" src="images/manual/02-topo-flow.png" alt="端到端链路拓扑">
+    <div class="figcap">图 4b · 现网截图：端到端链路 — 各节点显示真实主机、池选路（如 P1←VOS100）、IP 认证与路由一致性</div>
+  </div>
+
+  <h3>如何读状态</h3>
+  <table>
+    <tr><th>节点</th><th>正常表现</th><th>异常时</th></tr>
+    <tr><td>UFI 设备池</td><td>在线≈注册≈池内可用</td><td>注册为 0 → 查 subscriber / 网络</td></tr>
+    <tr><td>dSIPRouter</td><td>路由一致性绿；触发号与配置一致</td><td>提示缺 subscriber/规则 → 点同步路由</td></tr>
+    <tr><td>VOS</td><td>IP 认证「port=0」；已绑任意被叫池</td><td>未放行 → 查 address；未绑定 → 回通信配置勾选</td></tr>
+    <tr><td>线路承载</td><td>并发 ≤ 容量</td><td>长期打满 → 加设备或调 max_concurrent</td></tr>
+  </table>
+  <p>点 <b>抓 INVITE 看三值</b> 可查看当前桥接方言示例：R-URI=IMEI、X-VOLTE=真实被叫、请求域=本机。</p>
+  <div class="tip">图例右下角显示 <code>数据源：/ufi/comm/topo · 同步 …</code> 表示已加载真实配置；若仍见写死旧 IP，请 Ctrl+F5 强刷。</div>
+</section>
+
+<!-- 7 SMS -->
+<section id="sms">
+  <h2><span class="no">7</span>页面 D：短信中心 <code>/ufi-sms</code></h2>
+  <p>侧栏进入短信中心。UFI 号码池同时作为短信通道：平台下发 SIP MESSAGE（R-URI=IMEI，X-SMS=对端号码），由 UFI 经蜂窝送达。</p>
+
+  <div class="fig">
+    <img class="shot" src="images/manual/04-sms.png" alt="短信中心 · 发送短信">
+    <div class="figcap">图 5 · 现网截图：短信中心「发送短信」— 可用通道 2/2，支持单发/群发、模板、通道选择、黑名单与敏感词校验</div>
+  </div>
+
+  <h3>7.1 单发验收</h3>
+  <ol class="steps">
+    <li>确认通信管理中至少 1 台 UFI：在线、已注册、在池、SIM 就绪。</li>
+    <li>打开 <a href="https://ufi.mineo.top/ufi-sms" target="_blank">短信中心</a> → <b>发送短信</b>。</li>
+    <li>填写对端号码与内容（营销类注意签名/退订；敏感词即时校验）。</li>
+    <li>发送后到 <b>收发记录</b> 看状态；失败常见原因：通道离线、黑名单、夜间静默、频控。</li>
+  </ol>
+
+  <h3>7.2 群发与治理</h3>
+  <ul>
+    <li><b>群发任务</b>：导入号码、选模板/池、设速率与时段。</li>
+    <li><b>通道与频控</b>：按池限制每小时条数，避免单卡被运营商限制。</li>
+    <li><b>模板 / 黑名单 / 敏感词</b>：合规与风控，发送前自动拦截。</li>
+  </ul>
+  <div class="warn">短信与通话共用 UFI。高峰时请在通信管理观察并发，避免语音与短信抢满 <code>max_concurrent</code>。</div>
+</section>
+
+<!-- 8 VOS -->
+<section id="vos">
+  <h2><span class="no">8</span>客户 VOS3000 配合清单</h2>
+  <p>以下在 <span class="badge b-client">客户</span> VOS 管理界面操作。通信管理「变更任务」可生成正式指引单发给客户。</p>
+
+  <h3>8.1 路由网关「dsip接入」（必做 · 任意外呼）</h3>
+  <ol class="steps">
+    <li>打开：网关管理 → <b>路由网关</b>（不是对接网关同名项）→ 指向 dSIP 的项（如 dsip接入）。</li>
+    <li><b>网关组</b>必须已勾选（为空会导致应用 NPE / 一直「应用中」）。</li>
+    <li><b>网关前缀</b>改为通配：<code>0,1,400,800,9</code>（或 <code>1,0,400,800</code>）。不要填完整 11 位被叫白名单。</li>
+    <li>保存并应用；确认 mbx 侧 Prefix 已同步。</li>
+  </ol>
+
+  <h3>8.2 话机 DIDs（呼入）</h3>
+  <p>话机管理 → 分机（如 1002）→ DIDs 追加 SIM/IMEI（<b>保留原有号码</b>，逗号分隔）。</p>
+
+  <h3>8.3 对接认证</h3>
+  <p>对接/落地到 dSIP 使用 <b>IP 认证</b>；dSIP 侧 address 对该 VOS IP 放行且 <code>port=0</code>。</p>
+
+  <ul class="chk">
+    <li>网关前缀已是通配，不是逐号列表</li>
+    <li>网关组非空，应用成功</li>
+    <li>坐席示闲、话机已注册</li>
+    <li>从坐席拨未单独配置的手机号，CDR 被叫经由=dsip接入</li>
+  </ul>
+</section>
+
+<!-- 9 Accept -->
+<section id="accept">
+  <h2><span class="no">9</span>联调验收</h2>
+  <table>
+    <tr><th>#</th><th>用例</th><th>期望</th><th>查看位置</th></tr>
+    <tr><td>1</td><td>UFI 注册</td><td>location 有 IMEI</td><td>#topo KPI「已注册」</td></tr>
+    <tr><td>2</td><td>坐席外呼任意手机</td><td>接通或正常振铃；非 500/无可用路由</td><td>VOS CDR + #topo 并发</td></tr>
+    <tr><td>3</td><td>第二套 VOS（若有）</td><td>进对应池，不串池</td><td>通信配置「VOS x 任意」标记</td></tr>
+    <tr><td>4</td><td>短信单发</td><td>收发记录成功</td><td>/ufi-sms 记录</td></tr>
+    <tr><td>5</td><td>来显</td><td>被叫侧看到真实主叫/被叫而非裸 IMEI</td><td>手机实机 + X-VOLTE</td></tr>
+  </table>
+  <pre>选池日志关键字（kamailio）：
+<b>UFI VOS#100 pool P1 for callee …</b>   ← 按 VOS 进池
+<b>UFI pool select: pool=P1 … → &lt;IMEI&gt;</b>
+<b>UFI bridge: X-VOLTE append → &lt;被叫&gt;</b></pre>
+</section>
+
+<!-- 10 Trouble -->
+<section id="trouble">
+  <h2><span class="no">10</span>故障速查</h2>
+  <table>
+    <tr><th>现象</th><th>多半原因</th><th>处理</th></tr>
+    <tr><td>VOS CDR「无可用路由」</td><td>前缀仍是逐号</td><td>客户改通配前缀并应用</td></tr>
+    <tr><td>Server Internal Error(500)</td><td>未绑任意被叫 / 无默认池</td><td>通信配置勾选对应 VOS；确认 UFI 在线在池</td></tr>
+    <tr><td>应用一直转圈 / NPE</td><td>路由网关「网关组」为空</td><td>客户补网关组后重应用</td></tr>
+    <tr><td>触发号删不掉</td><td>旧版种子回写（已修）</td><td>强刷后保存应整表覆盖；仍异常联系我方</td></tr>
+    <tr><td>UFI 全不注册</td><td>subscriber / 密码 / 网络</td><td>重跑开户或同步路由；查 #topo 注册数</td></tr>
+    <tr><td>来显变成 IMEI</td><td>X-VOLTE 未带上</td><td>查桥接日志；确认走 UFI 池而非裸 drouting</td></tr>
+    <tr><td>短信失败</td><td>通道离线 / 敏感词 / 频控</td><td>短信中心记录原因；检查池内设备</td></tr>
+    <tr><td>#topo 数据不像现网</td><td>浏览器缓存</td><td>Ctrl+F5；看图例是否含 /ufi/comm/topo</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2><span class="no">附</span>快速链接</h2>
+  <ul>
+    <li><a href="https://ufi.mineo.top/carriergroups" target="_blank">运营商组</a></li>
+    <li><a href="https://ufi.mineo.top/ufi-callcenter" target="_blank">通信管理</a></li>
+    <li><a href="https://ufi.mineo.top/ufi-callcenter#topo" target="_blank">端到端链路</a></li>
+    <li><a href="https://ufi.mineo.top/ufi-sms" target="_blank">短信中心</a></li>
+    <li>管理台：<a href="/help">帮助中心</a> · <a href="/help/ufi-onboarding">UFI 单机接入教程</a></li>
+  </ul>
+</section>
+
+<footer>
+  UFI × VOS3000 对接用户手册 · dSIPRouter 管理台 · 打印本页即可作为培训讲义<br>
+  配置变更后请重载 Kamailio；客户 VOS 变更由客户应用话务配置
+</footer>
+
+</div>
+</body>
+</html>

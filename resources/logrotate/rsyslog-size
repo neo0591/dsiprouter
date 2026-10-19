@@ -1,0 +1,18 @@
+/var/log/syslog
+/var/log/auth.log
+/var/log/daemon.log
+/var/log/kern.log
+{
+    daily
+    maxsize 50M
+    rotate 4
+    missingok
+    notifempty
+    compress
+    delaycompress
+    su root adm
+    sharedscripts
+    postrotate
+        /usr/lib/rsyslog/rsyslog-rotate
+    endscript
+}

@@ -140,7 +140,7 @@ function setStaticScriptSettings() {
     export KAM_SIP_PORT=5060
     export KAM_SIPS_PORT=5061
     export KAM_DMQ_PORT=5090
-    export KAM_WSS_PORT=4443
+    export KAM_WSS_PORT=7443
 
     export DSIP_PROTO='https'
     export DSIP_API_PROTO='https'
@@ -3217,32 +3217,6 @@ function upgrade() {
         printerr "unsupported upgrade scenario ($CURRENT_VERSION -> $UPGRADE_VER)"
         exit 1
     }
-
-    if systemctl is-active -q dsiprouter; then
-        # check shared memory
-        if [[ $(${PYTHON_CMD} -c "
-import os
-os.chdir('${DSIP_PROJECT_DIR}/gui')
-from modules.api.licensemanager.functions import getLicenseStatus
-print(getLicenseStatus(license_tag='DSIP_CORE'))
-        ") != "3" ]]; then
-            printerr 'dSPIRouter core license is not valid'
-            exit 1
-        fi
-    else
-        # manually grab license status
-        if [[ $(${PYTHON_CMD} -c "
-import os, sys
-os.chdir('${DSIP_PROJECT_DIR}/gui')
-sys.path.insert(0, '${DSIP_SYSTEM_CONFIG_DIR}/gui')
-from modules.api.licensemanager.functions import licenseDictToStateDict, getLicenseStatusFromStateDict
-import settings
-print(getLicenseStatusFromStateDict(licenseDictToStateDict(settings.DSIP_LICENSE_STORE), 'DSIP_CORE'))
-        ") != "3" ]]; then
-            printerr 'dSPIRouter core license is not valid'
-            exit 1
-        fi
-    fi
 
     printdbg "starting migration from $CURRENT_VERSION to $UPGRADE_VER"
     ${NEW_PROJECT_DIR}/resources/upgrade/${UPGRADE_RELEASE}/scripts/migrate.sh

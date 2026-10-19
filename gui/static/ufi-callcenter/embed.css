@@ -1,0 +1,140 @@
+/* Embed UFI 呼叫控制台 into dSIPRouter content pane (对齐 ufi-console 适配层).
+   载入顺序：framework css → tokens.css → app.css → 本文件（同特异性后者胜） */
+
+/* ── 框架内容面板让出全宽 ── */
+.content-inner:has(.ufi-callcenter) {
+  padding: 0;
+  max-width: none;
+}
+
+/* ── app.css 的独立应用全局样式在主框架内还原 ── */
+html, body {
+  height: auto !important;
+  overflow: visible !important;
+}
+
+/* ── 壳层：竖向布局（tab 栏在上，main 在下），覆盖 .shell 的 grid ── */
+.ufi-callcenter.shell {
+  display: flex;
+  flex-direction: column;
+  grid-template: none;
+  height: auto;
+  min-height: calc(100vh - 56px);
+  background: var(--bg-app, #f4f6f9);
+}
+
+/* ── 横向 TAB 栏（复用 ufi-console 视觉） ── */
+.ufi-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: #404040;
+  border-bottom: 2px solid #F0AD4E;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.ufi-view-tabs .ufi-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #c4c4c5;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.ufi-view-tabs .ufi-tab:hover { color: #fff; background: #333; }
+.ufi-view-tabs .ufi-tab.is-active { background: #F0AD4E; color: #24170a; }
+.ufi-view-tabs .tab-count {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 1.4em;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: rgba(255,255,255,.12);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ufi-view-tabs .ufi-tab.is-active .tab-count { background: rgba(36,23,10,.18); }
+
+/* tab 栏右侧 meta 区 */
+.ufi-view-tabs__meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ufi-view-tabs__meta .btn.btn--sm {
+  background: #333;
+  color: #eee;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ufi-view-tabs__meta .btn.btn--sm.primary { background: #F0AD4E; color: #24170a; border-color: #F0AD4E; }
+.ufi-view-tabs__meta .btn.btn--sm:hover { filter: brightness(1.1); }
+
+/* 状态 pill 在深色栏上的适配（沿用 app.css .pill 变量） */
+.ufi-view-tabs__meta .pill {
+  background: #333;
+  border: 1px solid #555;
+  color: #ddd;
+}
+.ufi-view-tabs__meta .clock { color: #c4c4c5; }
+
+/* 面包屑（紧凑，放在 meta 内） */
+.ufi-view-tabs__meta .cc-crumb {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-right: 8px;
+  max-width: 420px;
+  overflow: hidden;
+}
+.ufi-view-tabs__meta .cc-crumb b { color: #fff; font-size: 13px; white-space: nowrap; }
+.ufi-view-tabs__meta .cc-crumb .sub { color: #9a9a9b; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ufi-view-tabs__meta .cc-clock { color: #c4c4c5; font-variant-numeric: tabular-nums; }
+
+/* ── 主区：flex 子项接管滚动 ── */
+.ufi-callcenter .main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  grid-area: auto;
+}
+
+/* ── 弹层压过主框架 chrome ── */
+.ufi-callcenter ~ .drawer-mask,
+.drawer-mask, .modal-mask { z-index: 2000 !important; }
+.drawer, .modal { z-index: 2001 !important; }
+.toasts { z-index: 2100 !important; }
+
+/* ── 分页控件紧凑化（.sel 的 width:100% 在 pager 行内被拉满） ── */
+.ufi-callcenter .pager { flex-wrap: wrap; }
+.ufi-callcenter .pager .sel {
+  width: 76px;
+  flex: none;
+  height: 28px;
+  padding: 0 24px 0 8px;
+  font-size: 12px;
+}
+.ufi-callcenter .pager .pg {
+  flex: none;
+  height: 28px;
+  line-height: 26px;
+  padding: 0 7px;
+  font-size: 12px;
+}

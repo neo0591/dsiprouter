@@ -1,0 +1,64 @@
+classDiagram
+    class dsip_customer {
+        +int id
+        +string name
+        +string code
+        +string domain
+        +bool enabled
+    }
+    class dsip_role {
+        +int id
+        +int customer_id
+        +string name
+        +json menus
+        +bool is_super
+    }
+    class dsip_user {
+        +int id
+        +string username
+        +string roles
+        +int customer_id
+    }
+    class acl {
+        +is_platform_admin() bool
+        +current_customer_id() int
+        +customer_sql(alias) str,params
+        +apply_customer_filter(where,params,col)
+        +require_owned_imei(imei) void
+        +scoped_imei(alias) str,params
+        +stamp_customer() int
+    }
+    class dsip_ufi_device {
+        +int id
+        +string imei
+        +int customer_id
+    }
+    class dsip_ufi_pool {
+        +int id
+        +string imei
+        +string pool_id
+        +int customer_id
+    }
+    class dsip_ufi_pool_did {
+        +string did
+        +string pool_id
+        +int customer_id
+    }
+    class dr_gw_lists {
+        +int id
+        +int customer_id
+    }
+    class subscriber {
+        +int id
+        +string username
+        +string domain
+        +string password
+    }
+    dsip_customer "1" --> "*" dsip_user : 归属
+    dsip_customer "1" --> "*" dsip_role : 归属
+    dsip_user "1" --> "*" acl : 会话上下文
+    dsip_customer "1" --> "*" dsip_ufi_device : customer_id
+    dsip_ufi_device "1" --> "*" dsip_ufi_pool : imei
+    dsip_ufi_pool "1" --> "*" dsip_ufi_pool_did : pool_id
+    dsip_customer "1" --> "*" dr_gw_lists : customer_id
+    dsip_customer "1" --> "*" subscriber : domain

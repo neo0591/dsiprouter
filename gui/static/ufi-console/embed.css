@@ -1,0 +1,95 @@
+/* Embed Cyber Blueprint into dSIPRouter content pane (keep family chrome). */
+.content-inner:has(.ufi-console) {
+  padding: 0;
+  max-width: none;
+}
+.ufi-console {
+  min-height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app, #f4f6f9);
+}
+.ufi-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: #404040;
+  border-bottom: 2px solid #F0AD4E;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.ufi-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #c4c4c5;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ufi-tab:hover { color: #fff; background: #333; }
+.ufi-tab.is-active {
+  background: #F0AD4E;
+  color: #24170a;
+}
+.ufi-tab .tab-count {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 1.4em;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: rgba(255,255,255,.12);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ufi-tab.is-active .tab-count { background: rgba(36,23,10,.18); }
+.ufi-tab .tab-count.is-alert { background: #e03131; color: #fff; }
+.ufi-view-tabs__meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ufi-view-tabs__meta .btn {
+  background: #333;
+  color: #eee;
+  border: 1px solid #555;
+}
+.ufi-console .drawer-scrim,
+.ufi-console .modal-scrim { z-index: 2000; }
+.ufi-console .drawer { z-index: 2001; }
+.ufi-console .view { padding: 20px 24px 48px; }
+.ufi-platform {
+  display: none;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e3e6ea;
+}
+.ufi-platform.is-open { display: block; }
+.ufi-platform form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: flex-end;
+}
+.ufi-platform label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #868e96;
+  font-weight: 600;
+}
+.ufi-platform input, .ufi-platform select {
+  min-width: 140px;
+  height: 32px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  padding: 0 8px;
+}

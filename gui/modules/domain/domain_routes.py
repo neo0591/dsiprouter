@@ -8,8 +8,6 @@ from flask import request, Blueprint, render_template, redirect, session, url_fo
 from sqlalchemy import exc as sql_exceptions
 from sqlalchemy.sql import text
 from werkzeug import exceptions as http_exceptions
-from modules.api.licensemanager.classes import WoocommerceError
-from modules.api.licensemanager.functions import getLicenseStatus
 from database import startSession, DummySession, Domain, DomainAttrs, Dispatcher, Gateways, Address
 from modules.api.api_routes import addEndpointGroups
 from shared import debugException, debugEndpoint, showError, strFieldsToDict, stripDictVals
@@ -170,16 +168,6 @@ def configureMSTeams(id):
         if (settings.DEBUG):
             debugEndpoint()
 
-        license_status = getLicenseStatus(license_tag='DSIP_MSTEAMS')
-        if license_status == 0:
-            return render_template('license_required.html', msg=None)
-
-        if license_status == 1:
-            return render_template('license_required.html', msg='license is not valid, ensure your license is still active')
-
-        if license_status == 2:
-            return render_template('license_required.html', msg='license is associated with another machine, re-associate it with this machine first')
-
         db = startSession()
 
         domain_query = db.query(Domain).filter(Domain.id == id)
@@ -187,8 +175,6 @@ def configureMSTeams(id):
 
         return render_template('msteams.html', domainid=id, domain=domain)
 
-    except WoocommerceError as ex:
-        return render_template('license_required.html', msg=str(ex))
     except sql_exceptions.SQLAlchemyError as ex:
         debugException(ex)
         error = "db"
@@ -255,16 +241,6 @@ def displayDomains():
                 'name': name,
                 'notes': notes
             }
-
-        license_status = getLicenseStatus(license_tag='DSIP_MSTEAMS')
-        if license_status == 0:
-            return render_template('domains.html', rows=res, pbxlookup=pbx_lookup, hc=False)
-
-        if license_status == 1:
-            return render_template('license_required.html', msg='license is not valid, ensure your license is still active')
-
-        if license_status == 2:
-            return render_template('license_required.html', msg='license is associated with another machine, re-associate it with this machine first')
 
         return render_template('domains.html', rows=res, pbxlookup=pbx_lookup, hc=True)
 

@@ -12,7 +12,6 @@ from werkzeug import exceptions as http_exceptions
 from shared import debugException, StatusCodes
 from util.ipc import STATE_SHMEM_NAME, getSharedMemoryDict
 from util.security import APIToken
-from modules.api.licensemanager.functions import getLicenseStatus
 import settings
 
 
@@ -93,31 +92,23 @@ def api_security(func):
         apiToken = APIToken(request)
         accept_header = request.headers.get('Accept', '')
 
-        # If user is logged into a session return right away
+        # Session auth (GUI)
         if session.get('logged_in'):
             return func(*args, **kwargs)
-        else:
-            if 'text/html' in accept_header:
-                return render_template('index.html', version=settings.VERSION), StatusCodes.HTTP_UNAUTHORIZED
 
-        # If API Request check for license
-        if not re.match('text/html|text/css', accept_header, flags=re.IGNORECASE):
-            flask_rule = request.url_rule.rule if request.url_rule is not None else ''
-            # Check if they have a Core Subscription
-            if flask_rule[:17] != '/api/v1/licensing' and getLicenseStatus(license_tag='DSIP_CORE') != 3:
-                return createApiResponse(
-                    error='http',
-                    msg='Unauthorized - Core Subscription Required. Purchase from https://dopensource.com/product/dsiprouter-core/',
-                    status_code=StatusCodes.HTTP_UNAUTHORIZED
-                )
-            # Check if token is valid
-            if not apiToken.isValid():
-                return createApiResponse(
-                    error='http',
-                    msg='Unauthorized',
-                    status_code=StatusCodes.HTTP_UNAUTHORIZED
-                )
-            # checks succeeded allow the request
+        # API token auth — allow even when Accept is text/html (browser tabs / reverse proxy)
+        if apiToken.isValid():
             return func(*args, **kwargs)
+
+        wants_html = bool(re.search(r'text/html', accept_header or '', flags=re.IGNORECASE))
+        if wants_html:
+            # Render login page in-place; inject_login_nextpage() keeps admin-proxy as nextpage.
+            return render_template('index.html', version=settings.VERSION), StatusCodes.HTTP_UNAUTHORIZED
+
+        return createApiResponse(
+            error='http',
+            msg='Unauthorized',
+            status_code=StatusCodes.HTTP_UNAUTHORIZED
+        )
 
     return wrapper

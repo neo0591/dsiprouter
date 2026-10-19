@@ -1,11 +1,83 @@
 #downloadCDR, #refreshCDR {
-  left: .25em;
+  margin-left: 0.35em;
   cursor: pointer;
+  font-size: 1.25rem;
+  vertical-align: middle;
 }
 
-#cdrs_wrapper > div.btn-group, #cdrs_wrapper > div.btn-group-vertical {
-    position: absolute;
-    display: -ms-inline-flexbox;
-    display: inline-flex;
-    vertical-align: middle;
+#cdrs_wrapper > div.btn-group,
+#cdrs_wrapper > div.btn-group-vertical {
+  position: absolute;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+/* Keep CDR toolbar from wrapping into the table */
+.content-header #menu {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  min-width: 220px;
+}
+
+.content-header #endpointgroups {
+  max-width: 260px;
+}
+
+/* Horizontal scroll + readable columns */
+#cdrs_wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+}
+
+#cdrs_wrapper .dataTables_scroll {
+  width: 100%;
+}
+
+#cdrs_wrapper .dataTables_scrollHead,
+#cdrs_wrapper .dataTables_scrollBody {
+  width: 100% !important;
+}
+
+#cdrs_wrapper .dataTables_scrollBody {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+}
+
+#cdrs {
+  width: 100% !important;
+  margin: 0;
+}
+
+#cdrs th,
+#cdrs td {
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 0.55rem 0.75rem;
+}
+
+#cdrs thead th {
+  background: #f8f9fa;
+  font-weight: 600;
+  border-bottom-width: 2px;
+}
+
+/* Soften dense header labels */
+#cdrs thead th {
+  font-size: 0.875rem;
+}
+
+#cdrs tbody td {
+  font-size: 0.875rem;
+}
+
+/* Ensure parent containers don't clip the scrollbar */
+.content-section.table-responsive:has(#cdrs) {
+  overflow-x: visible;
+  overflow-y: visible;
+  max-width: 100%;
+  padding-left: 15px;
+  padding-right: 15px;
 }

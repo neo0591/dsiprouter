@@ -1,0 +1,102 @@
+{% extends 'fullwidth_layout.html' %}
+
+{% block title %}{{ _('Setup Wizard') }}{% endblock %}
+
+{% block custom_css %}
+  {{ link_tag('setup') }}
+{% endblock %}
+
+{% block body %}
+<div class="setup-page">
+  <div class="wrapper-horizontal edge-centered children-align-inherit content-header">
+    <h2>{{ _('UFI to VOS setup') }}</h2>
+  </div>
+
+  {% set setup_step = 0 %}
+  {% include 'includes/setup_steps.html' %}
+
+  <p class="setup-lead">
+    {{ _('Follow these four steps. UFI phones register here; dSIPRouter passes From and X-VOLTE inbound, sets the outbound R-URI to the IMEI plus X-VOLTE, and sends calls to VOS3000 with IP authentication only.') }}
+  </p>
+
+  <div class="setup-flow" aria-hidden="true">
+    <div class="setup-node">
+      <strong>{{ _('Mobile A') }}</strong>
+      <span>{{ _('Cellular to UFI SIM') }}</span>
+    </div>
+    <div class="setup-arrow">→</div>
+    <div class="setup-node">
+      <strong>{{ _('UFI × N') }}</strong>
+      <span>{{ _('User = IMEI, password = MD5(IMEI)[:16]') }}</span>
+    </div>
+    <div class="setup-arrow">→</div>
+    <div class="setup-node is-core">
+      <strong>dSIPRouter</strong>
+      <span id="setup-sip-target">{{ dsiprouter_ip }}:5060</span>
+    </div>
+    <div class="setup-arrow">→</div>
+    <div class="setup-node">
+      <strong>VOS3000</strong>
+      <span>{{ _('IP auth, no SIP auth header') }}</span>
+    </div>
+    <div class="setup-arrow">→</div>
+    <div class="setup-node">
+      <strong>{{ _('Phones 1002 / 100x') }}</strong>
+      <span>{{ _('Billing and landing on VOS') }}</span>
+    </div>
+  </div>
+
+  <div class="setup-stats" id="setup-stats">
+    <div class="setup-stat"><div class="setup-stat-label">{{ _('UFI accounts') }}</div><div class="setup-stat-value" id="stat-ufi">—</div></div>
+    <div class="setup-stat"><div class="setup-stat-label">{{ _('Registered now') }}</div><div class="setup-stat-value" id="stat-online">—</div></div>
+    <div class="setup-stat"><div class="setup-stat-label">{{ _('SIM aliases') }}</div><div class="setup-stat-value" id="stat-sims">—</div></div>
+    <div class="setup-stat"><div class="setup-stat-label">{{ _('Phones / DIDs') }}</div><div class="setup-stat-value" id="stat-phones">—</div></div>
+    <div class="setup-stat"><div class="setup-stat-label">{{ _('VOS IPs') }}</div><div class="setup-stat-value" id="stat-gws">—</div></div>
+  </div>
+
+  <div class="setup-cards">
+    <article class="setup-card" data-step="1">
+      <h3><span>1</span> {{ _('VOS gateway') }}</h3>
+      <p>{{ _('Create a carrier group for VOS3000. Add the VOS IP as a gateway with IP authentication (no username/password). Typical host: 8.136.109.38.') }}</p>
+      <ul class="setup-check" id="vos-check"></ul>
+      <a class="btn btn-primary" href="/carriergroups">{{ _('Open Carrier Groups') }}</a>
+    </article>
+    <article class="setup-card" data-step="2">
+      <h3><span>2</span> {{ _('Open UFI accounts') }}</h3>
+      <p>{{ _('Batch-create SIP subscribers. Username is the IMEI; password is the first 16 hex chars of MD5(IMEI). Optional SIM becomes the dbaliases mapping for outbound.') }}</p>
+      <p class="setup-hint">{{ _('UFI app SIP server') }}: <code id="ufi-sip-copy">{{ dsiprouter_ip }}:5060</code></p>
+      <a class="btn btn-success" href="/onboarding">{{ _('Open UFI list') }}</a>
+    </article>
+    <article class="setup-card" data-step="3">
+      <h3><span>3</span> {{ _('Bind phone DIDs') }}</h3>
+      <p>{{ _('On phones such as 1002, append each UFI SIM to the DID list and choose the VOS carrier group. Inbound to that SIM rings the phone through VOS.') }}</p>
+      <ul class="setup-check" id="phone-check"></ul>
+      <a class="btn btn-success" href="/phones">{{ _('Open phone list') }}</a>
+    </article>
+    <article class="setup-card" data-step="4">
+      <h3><span>4</span> {{ _('Reload and verify') }}</h3>
+      <p>{{ _('Reload Kamailio from the top bar. Confirm UFI REGISTER (user = IMEI), then place a test call. Inbound keeps From/X-VOLTE; outbound R-URI is the registered name plus X-VOLTE.') }}</p>
+      <a class="btn btn-secondary" href="/cdrs">{{ _('Open CDRs') }}</a>
+    </article>
+  </div>
+
+  <div class="setup-regs">
+    <h3>{{ _('Live UFI registrations') }}</h3>
+    <table class="table table-striped" id="reg-table">
+      <thead>
+        <tr>
+          <th>{{ _('IMEI') }}</th>
+          <th>{{ _('Received') }}</th>
+          <th>{{ _('Expires') }}</th>
+          <th>{{ _('User-Agent') }}</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block custom_js %}
+  {{ script_tag('setup') }}
+{% endblock %}

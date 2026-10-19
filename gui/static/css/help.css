@@ -1,0 +1,150 @@
+.help-page {
+  padding: 8px 18px 36px;
+  max-width: 1180px;
+}
+
+.help-hero {
+  background: linear-gradient(135deg, #1e2a3d 0%, #31435f 60%, #3d4f6a 100%);
+  color: #fff;
+  border-radius: 14px;
+  padding: 28px 32px;
+  margin-bottom: 22px;
+  position: relative;
+  overflow: hidden;
+}
+
+.help-hero::after {
+  content: '';
+  position: absolute;
+  right: -36px;
+  top: -36px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: rgba(240, 173, 78, .18);
+}
+
+.help-hero h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  position: relative;
+}
+
+.help-hero p {
+  margin: 0;
+  color: #b9c4d4;
+  font-size: 14px;
+  max-width: 720px;
+  position: relative;
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.help-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 18px 16px;
+  border: 1px solid #e4e8ee;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff, #fafbfd);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s, box-shadow .15s;
+  min-height: 148px;
+}
+
+.help-card:hover {
+  border-color: #f0b06a;
+  box-shadow: 0 4px 14px rgba(232, 132, 44, .12);
+  color: inherit;
+  text-decoration: none;
+}
+
+.help-card .tag {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 99px;
+  background: #fdf3e7;
+  color: #c2651a;
+}
+
+.help-card h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.help-card p {
+  margin: 0;
+  font-size: 13px;
+  color: #5a6572;
+  flex: 1;
+}
+
+.help-card .meta {
+  font-size: 12px;
+  color: #8a97a8;
+}
+
+.help-viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.help-viewer-bar .title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c2430;
+}
+
+.help-viewer-bar .sub {
+  font-size: 12.5px;
+  color: #5a6572;
+}
+
+.help-viewer-bar .spacer {
+  flex: 1;
+}
+
+.help-viewer-frame {
+  width: 100%;
+  min-height: calc(100vh - 220px);
+  border: 1px solid #e4e8ee;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid #d5dbe3;
+  background: #fff;
+  color: #31435f;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.help-btn:hover {
+  border-color: #f0ad4e;
+  color: #1c2430;
+  text-decoration: none;
+}
+
+.help-btn.primary {
+  background: #f0ad4e;
+  border-color: #f0ad4e;
+  color: #24170a;
+  font-weight: 600;
+}

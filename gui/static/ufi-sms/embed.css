@@ -1,0 +1,132 @@
+/* Embed UFI 短信中心 into dSIPRouter content pane（对齐 ufi-callcenter 适配层）.
+   载入顺序：framework css → tokens.css → app.css → 本文件（同特异性后者胜） */
+
+/* ── 框架内容面板让出全宽 ── */
+.content-inner:has(.ufi-sms) {
+  padding: 0;
+  max-width: none;
+}
+
+/* ── app.css 的独立应用全局样式在主框架内还原 ── */
+html, body {
+  height: auto !important;
+  overflow: visible !important;
+}
+
+/* ── 壳层：竖向布局（tab 栏在上，main 在下） ── */
+.ufi-sms {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: calc(100vh - 56px);
+  background: var(--bg-app, #f4f6f9);
+}
+.ufi-sms .body2, .ufi-sms .shell2 { display: contents; }
+
+/* ── 横向 TAB 栏（复用 ufi-console 视觉，与通信管理同款） ── */
+.ufi-sms .ufi-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: #404040;
+  border-bottom: 2px solid #F0AD4E;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.ufi-sms .ufi-view-tabs .ufi-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #c4c4c5;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.ufi-sms .ufi-view-tabs .ufi-tab:hover { color: #fff; background: #333; }
+.ufi-sms .ufi-view-tabs .ufi-tab.is-active { background: #F0AD4E; color: #24170a; }
+.ufi-sms .ufi-view-tabs .tab-count {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 1.4em;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: rgba(255,255,255,.12);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ufi-sms .ufi-view-tabs .ufi-tab.is-active .tab-count { background: rgba(36,23,10,.18); }
+
+/* tab 栏右侧 meta 区 */
+.ufi-sms .ufi-view-tabs__meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ufi-sms .ufi-view-tabs__meta .btn.btn--sm {
+  background: #333;
+  color: #eee;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ufi-sms .ufi-view-tabs__meta .pill {
+  background: #333;
+  border: 1px solid #555;
+  color: #ddd;
+}
+.ufi-sms .ufi-view-tabs__meta .cc-crumb {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-right: 8px;
+  max-width: 420px;
+  overflow: hidden;
+}
+.ufi-sms .ufi-view-tabs__meta .cc-crumb b { color: #fff; font-size: 13px; white-space: nowrap; }
+.ufi-sms .ufi-view-tabs__meta .cc-crumb .sub { color: #9a9a9b; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ufi-sms .ufi-view-tabs__meta .cc-clock { color: #c4c4c5; }
+.ufi-sms .ufi-view-tabs__meta .clock { color: #c4c4c5; font-variant-numeric: tabular-nums; }
+
+/* ── 主区：flex 子项接管滚动 ── */
+.ufi-sms .main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* 视图内边距（原型由 main2 提供，这里补齐） */
+.ufi-sms .view { padding: 16px 18px 32px; }
+
+/* ── 弹层压过主框架 chrome ── */
+.modal-mask { z-index: 2000 !important; }
+.ufi-sms ~ .modal-mask, .modal-mask { z-index: 2000 !important; }
+.modal { z-index: 2001 !important; }
+.toasts { z-index: 2100 !important; }
+
+/* ── 分页控件紧凑化 ── */
+.ufi-sms .pager-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; }
+.ufi-sms .pgsel {
+  width: 96px;
+  flex: none;
+  height: 28px;
+  font-size: 12px;
+}
+.ufi-sms .pgbtn { flex: none; }
+
+/* 群发优化：内容编辑框加大 */
+#composeBody { min-height: 220px; font-size: 15px; line-height: 1.6; }

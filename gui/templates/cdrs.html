@@ -1,6 +1,6 @@
 {% extends 'table_layout.html' %}
 
-{% block title %}Call Detail Records{% endblock %}
+{% block title %}{{ _('Call Detail Records') }}{% endblock %}
 
 {% block custom_css %}
   {{ link_tag('cdrs') }}
@@ -8,46 +8,47 @@
 
 {% block table_headers %}
   <div>
-    <h3>Call Detail Records</h3>
+    <h3>{{ _('Call Detail Records') }}</h3>
   </div>
 
   <div class="btn-group col-sm-3" id="menu">
     <select class="btn-primary btn-md" id="endpointgroups">
-      <option class="d-none" value="0" selected disabled>Select Endpoint Group</option>
+      <option value="0" selected>{{ _('All Calls') }}</option>
     </select>
-    <i class="ti ti-refresh" id="refreshCDR"></i>
-    <i class="ti ti-download" id="downloadCDR"></i>
+    <i class="ti ti-refresh" id="refreshCDR" title="{{ _('Reload') }}"></i>
+    <i class="ti ti-download" id="downloadCDR" title="{{ _('Export') }}"></i>
   </div>
 
   <div>
     <label for="toggle_completed_calls">
-    Filter Calls
+    {{ _('Filter Calls') }}
     </label>
     <input id="toggle_completed_calls" type="checkbox" data-toggle="toggle" value="1"
-           data-on="All Calls <span class='icon-phone_enabled'></span>"
-           data-off="Billable Calls <span class='icon-money'></span>"
+           data-on="{{ _('All Calls') }} <span class='icon-phone_enabled'></span>"
+           data-off="{{ _('Billable Calls') }} <span class='icon-money'></span>"
            data-width="125px">
   </div>
 {% endblock %}
 
 
 {% block table %}
-  <table id="cdrs" class="table table-striped table-centered">
+  <table id="cdrs" class="table table-striped table-centered table-hover nowrap" style="width:100%">
     <thead>
     <tr class='element-row'>
-      <th data-field="cdr_id">CDR ID</th>
-      <th data-field="call_start_time">Call Start</th>
-      <th data-field="call_duration">Call Duration</th>
-      <th data-field="call_direction">Call Direction</th>
+      <th data-field="cdr_id">{{ _('CDR ID') }}</th>
+      <th data-field="call_start_time">{{ _('Call Start') }}</th>
+      <th data-field="call_duration">{{ _('Call Duration') }}</th>
+      <th data-field="call_direction">{{ _('Call Direction') }}</th>
       <th data-field="src_gwgroupid" class="d-none"></th>
-      <th data-field="src_gwgroupname">Source Gateway Group</th>
+      <th data-field="src_gwgroupname">{{ _('Source Gateway Group') }}</th>
       <th data-field="dst_gwgroupid" class="d-none"></th>
-      <th data-field="dst_gwgroupname">Destination Gateway Group</th>
-      <th data-field="src_username">Source Username</th>
-      <th data-field="dst_username">Destination Username</th>
-      <th data-field="src_address">Source Address</th>
-      <th data-field="dst_address">Destination Address</th>
-      <th data-field="call_id">Call ID</th>
+      <th data-field="dst_gwgroupname">{{ _('Destination Gateway Group') }}</th>
+      <th data-field="src_username">{{ _('Original Caller') }}</th>
+      <th data-field="dst_username">{{ _('Original Callee') }}</th>
+      <th data-field="src_address">{{ _('Source Address') }}</th>
+      <th data-field="dst_address">{{ _('Destination Address') }}</th>
+      <th data-field="hangup_reason">{{ _('Hangup Reason') }}</th>
+      <th data-field="call_id">{{ _('Call ID') }}</th>
     </tr>
     </thead>
   </table>

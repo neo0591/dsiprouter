@@ -30,7 +30,7 @@
 
   function getFilteredCdrIds() {
     var value = $('#cdrs').DataTable().columns( { search: 'applied' } ).data()[0];
-    // Check if values were selected using the search  field. 
+    // Check if values were selected using the search  field.
     if (value != ",") {
     	return value;
     }
@@ -40,13 +40,15 @@
   }
 
   function loadCDRDataTable(gwgroupid) {
+    // Allow 0 = All Calls; only bail when nothing selected
+    if (gwgroupid === null || gwgroupid === undefined || gwgroupid === '') {
+      return;
+    }
+
     changeLoadingState(true);
 
     // load CDR data
     if ($.fn.dataTable.isDataTable(cdr_table)) {
-      // Clear the contents of the table
-      // cdr_table.clear();
-      // cdr_table.draw();
       cdr_table.ajax.url(API_BASE_URL + "cdrs/endpointgroups/" + gwgroupid);
       cdr_table.ajax.reload();
     }
@@ -56,6 +58,8 @@
         "pagingType": "full_numbers",
         "processing": false,
         "serverSide": true,
+        "scrollX": true,
+        "autoWidth": false,
         "ajax": {
           "url": API_BASE_URL + "cdrs/endpointgroups/" + gwgroupid,
           "data": function (d) {
@@ -77,30 +81,36 @@
           }
         },
         "columns": [
-          {"data": "cdr_id", "orderable": false},
-          {"data": "call_start_time"},
-          {"data": "call_duration"},
-          {"data": "call_direction"},
+          {"data": "cdr_id", "orderable": false, "width": "70px"},
+          {"data": "call_start_time", "width": "160px"},
+          {"data": "call_duration", "width": "90px"},
+          {"data": "call_direction", "width": "80px"},
           {"data": "src_gwgroupid", "visible": false, "searchable": false},
-          {"data": "src_gwgroupname"},
+          {"data": "src_gwgroupname", "width": "160px"},
           {"data": "dst_gwgroupid", "visible": false, "searchable": false},
-          {"data": "dst_gwgroupname"},
-          {"data": "src_username"},
-          {"data": "dst_username"},
-          {"data": "src_address"},
-          {"data": "dst_address"},
-          {"data": "call_id", "orderable": false}
+          {"data": "dst_gwgroupname", "width": "160px"},
+          {"data": "src_username", "width": "140px"},
+          {"data": "dst_username", "width": "140px"},
+          {"data": "src_address", "width": "140px"},
+          {"data": "dst_address", "width": "160px"},
+          {"data": "hangup_reason", "width": "220px"},
+          {"data": "call_id", "orderable": false, "width": "220px"}
         ],
         "order": [[1, 'desc']],
         "pageLength": 100,
-        // make searchbox trigger less often
-        // very important for intensive serverside queries
         "searchDelay": 1000,
+        "drawCallback": function () {
+          // Keep header/body column alignment after horizontal scroll/resize
+          this.api().columns.adjust();
+        }
       });
 
-      // skip searchbox delay when pressing enter
-      // we throttle this in case enter is held down
-      // ignored if fired without changing the search text
+      // Recalculate widths once the scroll container is ready
+      setTimeout(function () {
+        if (cdr_table) {
+          cdr_table.columns.adjust();
+        }
+      }, 0);
       var searchbox = $(cdr_table.table().container()).find('input[type="search"]');
       var throttledEnter = throttledCallback(function(ev) {
         if (this.value === cdr_table.search()) {
@@ -120,18 +130,32 @@
   }
 
   $(document).ready(function () {
-    // get endpoint group data
+    // Ensure All Calls is present and selected by default
+    if (epgroup_select.find("option[value='0']").length === 0) {
+      epgroup_select.prepend("<option value='0' selected>All Calls</option>");
+    } else {
+      epgroup_select.val('0');
+    }
+
+    // Load endpoint + carrier groups into the filter
     $.ajax({
       type: "GET",
-      url: API_BASE_URL + "endpointgroups",
+      url: API_BASE_URL + "cdrs/groups",
       dataType: "json",
       contentType: "application/json; charset=utf-8",
-      success: function (response, textStatus, jqXHR) {
-        for (var i = 0; i < response.data.length; i++) {
-          epgroup_select.append("<option value='" + response.data[i].gwgroupid + "'>" + response.data[i].name + "</option>");
+      success: function (response) {
+        var rows = (response && response.data) ? response.data : [];
+        for (var i = 0; i < rows.length; i++) {
+          epgroup_select.append(
+            "<option value='" + rows[i].gwgroupid + "'>" + rows[i].name + "</option>"
+          );
         }
+      },
+      complete: function () {
+        // Always load CDRs for the selected group (defaults to All Calls)
+        loadCDRDataTable(epgroup_select.val() || '0');
       }
-    })
+    });
 
     // default is enabled (bootstrap5-toggle auto-inits this visible checkbox on
     // window.load; set the checkbox state + fire change rather than calling the
@@ -154,17 +178,18 @@
     // change table when endpoint group selected
     epgroup_select.change(function () {
       loadCDRDataTable(epgroup_select.find('option:selected').val());
-    })
-
-    $('#downloadCDR').click(function () {
-      var gwgroupid = $("#endpointgroups").val();
-      window.location.href = API_BASE_URL + 'cdrs/endpointgroups/' + gwgroupid + '?type=csv&filter=' + getFilteredCdrIds().join(',');
     });
 
-    
+    $('#downloadCDR').click(function () {
+      var gwgroupid = $("#endpointgroups").val() || '0';
+      var filtered = getFilteredCdrIds();
+      var filterParam = Array.isArray(filtered) ? filtered.join(',') : (filtered || '');
+      window.location.href = API_BASE_URL + 'cdrs/endpointgroups/' + gwgroupid + '?type=csv&filter=' + filterParam;
+    });
+
     // reload table when the refresh button is clicked
     $('#refreshCDR').click(function () {
-      loadCDRDataTable(epgroup_select.find('option:selected').val());
+      loadCDRDataTable(epgroup_select.find('option:selected').val() || '0');
     });
   });
 

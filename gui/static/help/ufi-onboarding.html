@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UFI 接入教程 — 上线 · 配置 · 测试 · 链路分析</title>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#1c2430; --ink2:#5a6572; --line:#e4e8ee;
+  --brand:#e8842c; --brand-bg:#fdf3e7; --ok:#1e9e6a; --ok-bg:#e8f7f0;
+  --warn:#c2651a; --warn-bg:#fdf1e3; --err:#c0392b; --err-bg:#fbeeec;
+  --blue:#2563eb; --blue-bg:#eaf1fd; --code:#f1f3f6; --mono:'Cascadia Code',Consolas,'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:15px/1.75 -apple-system,'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--ink);padding:40px 16px}
+.page{max-width:960px;margin:0 auto}
+header.hero{background:linear-gradient(135deg,#22304a,#31435f);color:#fff;border-radius:14px;padding:36px 40px;margin-bottom:28px}
+header.hero h1{font-size:26px;margin-bottom:8px}
+header.hero p{color:#b9c4d4;font-size:14px}
+.meta{display:flex;gap:18px;margin-top:14px;font-size:12.5px;color:#93a1b5;flex-wrap:wrap}
+.meta span{display:inline-flex;align-items:center;gap:6px}
+.toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 26px;margin-bottom:28px}
+.toc b{font-size:15px}
+.toc ol{margin:10px 0 0 20px;columns:2;column-gap:40px;font-size:14px}
+.toc a{color:var(--blue);text-decoration:none}
+.toc a:hover{text-decoration:underline}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:30px 36px;margin-bottom:24px}
+h2{font-size:20px;padding-bottom:10px;border-bottom:2px solid var(--brand);margin-bottom:18px;display:flex;align-items:center;gap:10px}
+h2 .no{background:var(--brand);color:#fff;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+h3{font-size:16px;margin:22px 0 10px;color:#2a3546}
+p{margin:8px 0}
+ul,ol{margin:8px 0 8px 22px}
+li{margin:4px 0}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+th{background:#f0f3f7;text-align:left;padding:9px 12px;border:1px solid var(--line);font-weight:600;white-space:nowrap}
+td{padding:9px 12px;border:1px solid var(--line);vertical-align:top}
+tr:nth-child(even) td{background:#fafbfc}
+code{font-family:var(--mono);font-size:12.5px;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{background:#22304a;color:#d7e2f0;border-radius:10px;padding:16px 20px;overflow-x:auto;font-size:12.5px;line-height:1.6;margin:12px 0;font-family:var(--mono)}
+pre b{color:#ffb35c;font-weight:600}
+.tip,.warn,.danger{border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13.5px;display:flex;gap:10px}
+.tip{background:var(--ok-bg);border-left:4px solid var(--ok)}
+.warn{background:var(--warn-bg);border-left:4px solid var(--warn)}
+.danger{background:var(--err-bg);border-left:4px solid var(--err)}
+.tip .ic,.warn .ic,.danger .ic{flex:none;font-size:16px}
+.badge{display:inline-block;font-size:11.5px;padding:1px 9px;border-radius:99px;vertical-align:1px;margin:0 2px}
+.b-ok{background:var(--ok-bg);color:var(--ok)}
+.b-warn{background:var(--warn-bg);color:var(--warn)}
+.b-err{background:var(--err-bg);color:var(--err)}
+.b-blue{background:var(--blue-bg);color:var(--blue)}
+.fig{margin:20px 0;text-align:center}
+.fig svg{max-width:100%;height:auto;background:#fbfcfe;border:1px solid var(--line);border-radius:12px}
+.figcap{font-size:12.5px;color:var(--ink2);margin-top:8px}
+.steps{counter-reset:st;margin:14px 0}
+.steps>li{list-style:none;counter-increment:st;position:relative;padding-left:44px;margin:14px 0}
+.steps>li::before{content:counter(st);position:absolute;left:0;top:2px;width:28px;height:28px;border-radius:50%;background:var(--brand-bg);color:var(--brand);font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--brand)}
+.kv{display:grid;grid-template-columns:200px 1fr;gap:4px 16px;font-size:13.5px;margin:10px 0}
+.kv div:nth-child(odd){color:var(--ink2);text-align:right}
+.kv div:nth-child(even){font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.chk{list-style:none;margin-left:4px}
+.chk li::before{content:'☐ ';color:var(--brand);font-size:16px}
+footer{text-align:center;color:var(--ink2);font-size:12.5px;padding:10px 0 30px}
+@media print{body{padding:0;background:#fff}section{border:none;page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="hero">
+  <h1>UFI 接入教程</h1>
+  <p>新增一台 UFI 设备到系统：自动纳管 → 通信配置 → 呼入呼出联调 → 实测后的链路分析</p>
+  <div class="meta">
+    <span>🖥 管理台 ufi.mineo.top</span>
+    <span>📞 通话链路 手机 → UFI → dSIPRouter → VOS3000 → 坐席</span>
+    <span>📄 适用固件 Linkcircle-UFI-C</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#arch">系统架构总览</a></li>
+    <li><a href="#pre">前置条件清单</a></li>
+    <li><a href="#step1">第一步：设备上电与自动纳管</a></li>
+    <li><a href="#step2">第二步：通信管理配置（入池）</a></li>
+    <li><a href="#step3">第三步：VOS3000 侧配置</a></li>
+    <li><a href="#step4">第四步：呼入呼出测试</a></li>
+    <li><a href="#step5">第五步：实测后的链路分析</a></li>
+    <li><a href="#trouble">常见故障速查表</a></li>
+    <li><a href="#appendix">附录：认证与签名机制</a></li>
+  </ol>
+</nav>
+
+<!-- ═══════════ 1 架构 ═══════════ -->
+<section id="arch">
+  <h2><span class="no">1</span>系统架构总览</h2>
+  <p>整个平台由「通话数据面」和「管理面」两部分组成。UFI 设备既是 VoLTE 终端又是 SIP 网关，所有呼叫经 dSIPRouter（Kamailio）选路后与 VOS3000 交换。</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI','Microsoft YaHei',sans-serif">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 Z" fill="#8a97a8"/>
+      </marker>
+      <marker id="arb" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 Z" fill="#e8842c"/>
+      </marker>
+    </defs>
+    <!-- data plane boxes -->
+    <g font-size="13">
+      <rect x="20" y="60" width="130" height="70" rx="10" fill="#eaf1fd" stroke="#2563eb" stroke-width="1.4"/>
+      <text x="85" y="90" text-anchor="middle" fill="#1d4ed8" font-weight="700">外线手机</text>
+      <text x="85" y="110" text-anchor="middle" fill="#5a6572" font-size="11">呼入主叫 / 呼出被叫</text>
+
+      <rect x="200" y="60" width="150" height="70" rx="10" fill="#fdf3e7" stroke="#e8842c" stroke-width="1.6"/>
+      <text x="275" y="86" text-anchor="middle" fill="#c2651a" font-weight="700">UFI 设备</text>
+      <text x="275" y="104" text-anchor="middle" fill="#5a6572" font-size="11">4G 上网 · VoLTE SIM 卡</text>
+      <text x="275" y="119" text-anchor="middle" fill="#5a6572" font-size="11">内置 SIP 分机（用户名=SIM号）</text>
+
+      <rect x="400" y="52" width="190" height="86" rx="10" fill="#fff" stroke="#1c2430" stroke-width="1.8"/>
+      <text x="495" y="78" text-anchor="middle" fill="#1c2430" font-weight="700">dSIPRouter</text>
+      <text x="495" y="96" text-anchor="middle" fill="#5a6572" font-size="11">106.75.29.22（Kamailio :5060）</text>
+      <text x="495" y="112" text-anchor="middle" fill="#5a6572" font-size="11">设备注册 · 线路池选路 · dbaliases</text>
+      <text x="495" y="128" text-anchor="middle" fill="#93a1b5" font-size="10">acc 呼叫日志（route 侧）</text>
+
+      <rect x="640" y="60" width="150" height="70" rx="10" fill="#e8f7f0" stroke="#1e9e6a" stroke-width="1.4"/>
+      <text x="715" y="86" text-anchor="middle" fill="#17754f" font-weight="700">VOS3000</text>
+      <text x="715" y="104" text-anchor="middle" fill="#5a6572" font-size="11">8.136.109.38 :5060</text>
+      <text x="715" y="119" text-anchor="middle" fill="#5a6572" font-size="11">话机 1002（坐席）</text>
+
+      <rect x="400" y="205" width="190" height="60" rx="10" fill="#f4f0fb" stroke="#7c5cd6" stroke-width="1.4"/>
+      <text x="495" y="230" text-anchor="middle" fill="#5b3fae" font-weight="700">管理面 ufi.mineo.top</text>
+      <text x="495" y="248" text-anchor="middle" fill="#5a6572" font-size="11">设备监控 /ufi · 通信管理 /ufi-callcenter</text>
+    </g>
+    <!-- arrows -->
+    <g stroke="#8a97a8" stroke-width="1.6" fill="none">
+      <line x1="150" y1="95" x2="196" y2="95" marker-end="url(#ar)"/>
+      <line x1="350" y1="95" x2="396" y2="95" marker-end="url(#ar)"/>
+      <line x1="590" y1="95" x2="636" y2="95" marker-end="url(#ar)"/>
+    </g>
+    <g stroke="#e8842c" stroke-width="1.6" fill="none" stroke-dasharray="5 4">
+      <path d="M 275 130 C 275 235 350 235 396 235" marker-end="url(#arb)"/>
+      <path d="M 595 235 C 660 235 660 140 700 133" marker-end="url(#arb)"/>
+    </g>
+    <g font-size="11" fill="#8a97a8">
+      <text x="163" y="88">SIP</text>
+      <text x="363" y="88">SIP</text>
+      <text x="603" y="88">SIP</text>
+      <text x="295" y="212" fill="#e8842c">HTTP 上报 / 指令</text>
+      <text x="622" y="205" fill="#e8842c">配置下发</text>
+    </g>
+    <!-- legend -->
+    <g font-size="11.5" fill="#5a6572">
+      <line x1="680" y1="290" x2="712" y2="290" stroke="#8a97a8" stroke-width="1.6"/>
+      <text x="720" y="294">通话数据面（SIP/RTP）</text>
+      <line x1="680" y1="310" x2="712" y2="310" stroke="#e8842c" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <text x="720" y="314">管理面（HTTP）</text>
+    </g>
+  </svg>
+  <div class="figcap">图 1 · 通话数据面与管理面。UFI 经 SIP 注册到 dSIPRouter，管理台通过 HTTP 接口与设备交互。</div>
+  </div>
+
+  <table>
+    <tr><th style="width:170px">组件</th><th>职责</th><th style="width:230px">本教程涉及页面 / 接口</th></tr>
+    <tr><td><b>UFI 设备</b></td><td>4G 上网 + VoLTE 语音，内置 SIP 分机；上电后主动向管理台注册、上报状态</td><td>设备监控 <code>/ufi</code></td></tr>
+    <tr><td><b>dSIPRouter</b></td><td>设备接入认证、线路池选路、呼入 dbaliases 映射、acc 呼叫日志</td><td>通信管理 <code>/ufi-callcenter</code></td></tr>
+    <tr><td><b>VOS3000</b></td><td>坐席（话机 1002）、外呼网关与号段授权</td><td>VOS 管理界面（客户侧）</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════ 2 前置条件 ═══════════ -->
+<section id="pre">
+  <h2><span class="no">2</span>前置条件清单</h2>
+  <p>开工前逐项确认，任何一项缺失都会卡在后面的步骤：</p>
+  <ul class="chk">
+    <li>UFI 设备已插入<b>可用的 VoLTE SIM 卡</b>（4G 可上网，信号 ≥ 中等）</li>
+    <li>设备固件为 <b>Linkcircle-UFI-C</b>（支持 sip-setting / status-push / log 上报）</li>
+    <li>设备所在网络可访问公网（能连到管理台域名）</li>
+    <li>已知晓设备 <b>IMEI</b>（机身标签或设备启动日志可查）与 SIM 号码</li>
+    <li>已登录管理台 <code>https://ufi.mineo.top</code>，能打开「UFI 设备」与「通信管理」两个页面</li>
+    <li>（联调阶段）VOS3000 管理权限，或已把 VOS 侧配置项列入客户指引单</li>
+  </ul>
+  <div class="tip"><span class="ic">💡</span><div><b>SIP 认证信息不用人工准备。</b>系统约定：SIP 用户名 = SIM 号，密码 = <code>MD5(IMEI) 前 16 位</code>，SIP 服务器地址由管理台在 sip-setting 应答中自动下发，设备侧零配置。</div></div>
+</section>
+
+<!-- ═══════════ 3 上电纳管 ═══════════ -->
+<section id="step1">
+  <h2><span class="no">3</span>第一步：设备上电与自动纳管</h2>
+  <p>UFI 的接入是「设备主动上报 → 服务端自动开户 → 默认配置回填」的全自动流程，人工只需在管理台确认结果。</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI','Microsoft YaHei',sans-serif" font-size="12.5">
+    <defs>
+      <marker id="ar2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 Z" fill="#8a97a8"/>
+      </marker>
+    </defs>
+    <!-- lanes -->
+    <rect x="30" y="20" width="200" height="246" rx="12" fill="#fdf3e7" stroke="#f0d5b0"/>
+    <rect x="330" y="20" width="240" height="246" rx="12" fill="#f6f7f9" stroke="#dfe4ea"/>
+    <rect x="670" y="20" width="200" height="246" rx="12" fill="#eaf1fd" stroke="#c9d8f5"/>
+    <text x="130" y="45" text-anchor="middle" font-weight="700" fill="#c2651a">UFI 设备</text>
+    <text x="450" y="45" text-anchor="middle" font-weight="700" fill="#1c2430">dSIPRouter 管理台</text>
+    <text x="770" y="45" text-anchor="middle" font-weight="700" fill="#1d4ed8">管理台界面</text>
+    <!-- seq -->
+    <g stroke="#8a97a8" stroke-width="1.5" fill="none">
+      <line x1="130" y1="55" x2="130" y2="250"/><line x1="450" y1="55" x2="450" y2="250"/><line x1="770" y1="55" x2="770" y2="250"/>
+      <line x1="130" y1="80" x2="446" y2="80" marker-end="url(#ar2)"/>
+      <line x1="450" y1="120" x2="134" y2="120" marker-end="url(#ar2)"/>
+      <line x1="130" y1="160" x2="446" y2="160" marker-end="url(#ar2)"/>
+      <line x1="130" y1="200" x2="446" y2="200" marker-end="url(#ar2)"/>
+      <line x1="450" y1="235" x2="766" y2="235" marker-end="url(#ar2)"/>
+    </g>
+    <g fill="#1c2430">
+      <rect x="140" y="63" width="300" height="24" rx="6" fill="#fff" stroke="#e4e8ee"/>
+      <text x="150" y="79" font-family="Consolas,monospace" font-size="11">① POST /api/ufi/sip-setting（签名）</text>
+      <rect x="150" y="103" width="290" height="24" rx="6" fill="#fff" stroke="#e4e8ee"/>
+      <text x="160" y="119" font-family="Consolas,monospace" font-size="11">② Ufi-Set-Request：SIP地址/密码 回填</text>
+      <rect x="140" y="143" width="300" height="24" rx="6" fill="#fff" stroke="#e4e8ee"/>
+      <text x="150" y="159" font-family="Consolas,monospace" font-size="11">③ SIP REGISTER（用户名=SIM号）→ 200 OK</text>
+      <rect x="140" y="183" width="300" height="24" rx="6" fill="#fff" stroke="#e4e8ee"/>
+      <text x="150" y="199" font-family="Consolas,monospace" font-size="11">④ status-push 心跳保活（10s 级）</text>
+      <rect x="460" y="218" width="290" height="24" rx="6" fill="#fff" stroke="#e4e8ee"/>
+      <text x="470" y="234" font-size="11">⑤ 设备监控列表出现新设备 · 在线 ✔</text>
+    </g>
+  </svg>
+  <div class="figcap">图 2 · 新设备上电后的自动纳管时序。全程无需在设备端手动填写 SIP 服务器。</div>
+  </div>
+
+  <ol class="steps">
+    <li><b>上电插卡</b>：确认 SIM 卡在位、4G 联网成功（设备屏或指示灯）。</li>
+    <li><b>设备自动发起 sip-setting</b>：设备带签名上报 IMEI / SIM 号；服务端校验签名后，若开启自动开户（<code>auto_provision</code>），即按 IMEI 创建 SIP 账号并回填 <code>sipServerAddress / sipServerPort / sippassWord</code>。</li>
+    <li><b>设备用下发参数完成 SIP 注册</b>：Kamailio 侧出现 location 绑定，状态变为已注册。</li>
+    <li><b>心跳保活</b>：设备按周期上报 status-push（信号、CPU、存储、SIP/VoLTE 状态等），服务端据此维护在线状态。</li>
+    <li><b>管理台确认</b>：打开「UFI 设备」(<code>/ufi</code>)，新 IMEI 应出现在列表顶部，核心网状态满足下表。</li>
+  </ol>
+
+  <table>
+    <tr><th style="width:200px">检查项</th><th style="width:130px">期望值</th><th>不达标时</th></tr>
+    <tr><td>设备出现且「在线」</td><td><span class="badge b-ok">在线</span></td><td>查设备网络/管理台连通性，看第一步上报是否到达（Nginx/WAF 访问日志）</td></tr>
+    <tr><td>SIP 注册</td><td><span class="badge b-ok">已注册</span></td><td>确认 sip-setting 应答非空（首次注册即自动下发）；401 见附录签名机制</td></tr>
+    <tr><td>VoLTE</td><td><span class="badge b-ok">在线</span></td><td>SIM 未开通 VoLTE 或当地无覆盖，换卡/换位置</td></tr>
+    <tr><td>心跳保活</td><td><span class="badge b-ok">正常</span></td><td>超过 300s 离线会自动记入「指令与日志 → 设备异常事件」</td></tr>
+    <tr><td>buildNumber</td><td>有版本号</td><td>固件过旧，先升级固件再继续</td></tr>
+  </table>
+
+  <div class="warn"><span class="ic">⚠️</span><div>若列表里出现疑似重复/测试设备，可在设备监控中直接<b>删除</b>（会连同事件、短信、通话、日志文件一起清理，不可恢复）。</div></div>
+</section>
+
+<!-- ═══════════ 4 通信配置 ═══════════ -->
+<section id="step2">
+  <h2><span class="no">4</span>第二步：通信管理配置（入池）</h2>
+  <p>纳管成功的设备还要在「通信管理」(<code>/ufi-callcenter</code>) 里配置通信属性，才会参与线路池轮询选路。</p>
+
+  <h3>操作路径</h3>
+  <ol class="steps">
+    <li>进入 <b>通信管理 → UFI 通信配置</b>，在列表找到新 IMEI（设备台账自动带出，只读）。</li>
+    <li>点击行内「编辑」，填写通信属性后<b>保存即落库生效</b>（写入 <code>dsip_ufi_pool</code> 表，无需重启）。</li>
+    <li>回到「线路总览」确认新线路出现在轮询池中，KPI 开始累计。</li>
+  </ol>
+
+  <table>
+    <tr><th style="width:170px">字段</th><th style="width:110px">示例</th><th>说明</th></tr>
+    <tr><td><code>sim</code></td><td>13215946233</td><td>SIM 号，即 SIP 用户名；也是呼入 dbaliases 的映射目标之一</td></tr>
+    <tr><td><code>pool_id</code></td><td>P1</td><td>线路池编号，同池按权重轮询；<code>—</code> 表示未入池</td></tr>
+    <tr><td><code>enabled</code></td><td>1</td><td>通信启用开关；停用后退出轮询池（呼入不受影响）</td></tr>
+    <tr><td><code>in_pool</code></td><td>1</td><td>是否参与选路；维护模式下可置 0 摘出流量</td></tr>
+    <tr><td><code>weight</code></td><td>1 ~ 99</td><td>池内权重，越大分到的话务越多</td></tr>
+    <tr><td><code>max_concurrent</code></td><td>2</td><td>并发上限（单 UFI 建议 ≤ 2）</td></tr>
+    <tr><td><code>note</code></td><td>UFI#4 新接入</td><td>备注，方便多设备管理</td></tr>
+  </table>
+
+  <div class="tip"><span class="ic">💡</span><div>「UFI 通信配置」支持勾选多台后<b>批量启停 / 转维护 / 清零并发计数</b>；「变更任务」页保留两类任务：我方待办（如批量开户脚本）与客户指引单（VOS 侧配置的交接单），新设备如果只动本页配置，不需要生成任何待办。</div></div>
+</section>
+
+<!-- ═══════════ 5 VOS 侧 ═══════════ -->
+<section id="step3">
+  <h2><span class="no">5</span>第三步：VOS3000 侧配置</h2>
+  <p>这一步打通「dSIPRouter ↔ VOS3000」。分呼入、呼出两条，配置项在 VOS 管理界面（若 VOS 由客户管理，可直接在通信管理「变更任务」页生成指引单发给客户）。</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI','Microsoft YaHei',sans-serif" font-size="12.5">
+    <defs>
+      <marker id="ag" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#1e9e6a"/></marker>
+      <marker id="ao" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#c2651a"/></marker>
+    </defs>
+    <text x="450" y="28" text-anchor="middle" font-weight="700" font-size="14" fill="#17754f">① 呼入：外线手机 → 坐席</text>
+    <g font-size="12">
+      <rect x="40" y="48" width="130" height="46" rx="9" fill="#eaf1fd" stroke="#2563eb"/><text x="105" y="76" text-anchor="middle" fill="#1d4ed8" font-weight="600">外线手机</text>
+      <rect x="270" y="48" width="150" height="46" rx="9" fill="#fdf3e7" stroke="#e8842c"/><text x="345" y="70" text-anchor="middle" fill="#c2651a" font-weight="600">UFI (SIM号)</text><text x="345" y="86" text-anchor="middle" font-size="10.5" fill="#5a6572">VoLTE 亮铃</text>
+      <rect x="520" y="42" width="170" height="58" rx="9" fill="#fff" stroke="#1c2430"/><text x="605" y="64" text-anchor="middle" fill="#1c2430" font-weight="600">dSIPRouter</text><text x="605" y="82" text-anchor="middle" font-size="10.5" fill="#5a6572">dbaliases: SIM号 → 1002</text>
+      <rect x="740" y="48" width="130" height="46" rx="9" fill="#e8f7f0" stroke="#1e9e6a"/><text x="805" y="76" text-anchor="middle" fill="#17754f" font-weight="600">VOS 坐席 1002</text>
+      <line x1="170" y1="71" x2="266" y2="71" stroke="#1e9e6a" stroke-width="1.8" marker-end="url(#ag)"/>
+      <line x1="420" y1="71" x2="516" y2="71" stroke="#1e9e6a" stroke-width="1.8" marker-end="url(#ag)"/>
+      <line x1="690" y1="71" x2="736" y2="71" stroke="#1e9e6a" stroke-width="1.8" marker-end="url(#ag)"/>
+      <text x="458" y="62" font-size="10.5" fill="#5a6572">INVITE</text><text x="700" y="62" font-size="10.5" fill="#5a6572">转接</text>
+    </g>
+    <text x="450" y="160" text-anchor="middle" font-weight="700" font-size="14" fill="#c2651a">② 呼出：坐席 → 外线手机</text>
+    <g font-size="12">
+      <rect x="740" y="188" width="130" height="46" rx="9" fill="#e8f7f0" stroke="#1e9e6a"/><text x="805" y="216" text-anchor="middle" fill="#17754f" font-weight="600">坐席 1002 拨号</text>
+      <rect x="520" y="182" width="170" height="58" rx="9" fill="#fff" stroke="#1c2430"/><text x="605" y="204" text-anchor="middle" fill="#1c2430" font-weight="600">VOS3000</text><text x="605" y="222" text-anchor="middle" font-size="10.5" fill="#5a6572">接入网关「dsip接入」IP认证</text>
+      <rect x="270" y="182" width="150" height="58" rx="9" fill="#fff" stroke="#1c2430"/><text x="345" y="204" text-anchor="middle" fill="#1c2430" font-weight="600">dSIPRouter</text><text x="345" y="222" text-anchor="middle" font-size="10.5" fill="#5a6572">线路池按权重选 UFI</text>
+      <rect x="40" y="188" width="130" height="46" rx="9" fill="#fdf3e7" stroke="#e8842c"/><text x="105" y="216" text-anchor="middle" fill="#c2651a" font-weight="600">UFI 外呼</text>
+      <line x1="736" y1="211" x2="694" y2="211" stroke="#c2651a" stroke-width="1.8" marker-end="url(#ao)"/>
+      <line x1="516" y1="211" x2="424" y2="211" stroke="#c2651a" stroke-width="1.8" marker-end="url(#ao)"/>
+      <line x1="266" y1="211" x2="174" y2="211" stroke="#c2651a" stroke-width="1.8" marker-end="url(#ao)"/>
+      <text x="690" y="202" font-size="10.5" fill="#5a6572">号段授权</text><text x="446" y="202" font-size="10.5" fill="#5a6572">INVITE</text>
+    </g>
+    <rect x="150" y="286" width="600" height="52" rx="10" fill="#fdf1e3" stroke="#f0d5b0"/>
+    <text x="450" y="307" text-anchor="middle" fill="#c2651a" font-weight="600">VOS 侧配置要点（一次性，后续新增 UFI 只需追加号码）</text>
+    <text x="450" y="327" text-anchor="middle" fill="#5a6572" font-size="11.5">话机 1002 DIDs 追加新 SIM 号 · 网关「dsip接入」呼出号段追加新 SIM 号 · 原有号码必须保留</text>
+  </svg>
+  <div class="figcap">图 3 · 呼入/呼出信令路径与 VOS 侧配置要点。</div>
+  </div>
+
+  <table>
+    <tr><th style="width:90px">方向</th><th style="width:260px">VOS 配置项</th><th>要点</th></tr>
+    <tr><td rowspan="2">呼入</td><td>话机管理 → 话机 <b>1002</b> → DIDs</td><td>末尾用英文逗号追加新 SIM 号；<b>覆盖原有值会导致现有呼入中断</b></td></tr>
+    <tr><td>dSIPRouter → 号码与路由</td><td>dbaliases 呼入映射（SIM 号 → 1002），设备 sip-setting 自动开户时已生成，确认存在即可</td></tr>
+    <tr><td rowspan="2">呼出</td><td>网关管理 → 接入网关「dsip接入」</td><td>认证方式 = IP 认证，IP = dSIPRouter 出口地址；呼出号段/Prefix 追加新 SIM 号（号段是授权白名单，不在白名单会被拒呼）</td></tr>
+    <tr><td>dSIPRouter 通信管理</td><td>无需额外配置，线路池选路在第二步已就绪</td></tr>
+  </table>
+
+  <div class="warn"><span class="ic">⚠️</span><div>客户版 VOS 可能不开放网关菜单，需管理员权限；改完话务配置后按客户规范重载（reload）配置再验证。</div></div>
+</section>
+
+<!-- ═══════════ 6 测试 ═══════════ -->
+<section id="step4">
+  <h2><span class="no">6</span>第四步：呼入呼出测试</h2>
+  <p>用真实外线手机完成以下测试矩阵，每项都记录结果与时间点（后面链路分析要按时间对齐）。</p>
+  <table>
+    <tr><th style="width:70px">编号</th><th style="width:130px">类型</th><th>操作</th><th style="width:190px">预期</th><th style="width:120px">结果</th></tr>
+    <tr><td>T1</td><td>呼入 → 坐席</td><td>外线手机拨打新 SIM 号</td><td>坐席 1002 振铃，接通双向语音正常</td><td>☐ 通过 ☐ 失败</td></tr>
+    <tr><td>T2</td><td>呼出</td><td>坐席拨新 SIM 号所在段的外线号码</td><td>外线手机来电显示为新 SIM 号，接通正常</td><td>☐ 通过 ☐ 失败</td></tr>
+    <tr><td>T3</td><td>池轮询</td><td>连续呼出 4 次（池内 ≥2 台 UFI）</td><td>按权重分摊到不同 UFI（看通话记录 imei 列）</td><td>☐ 通过 ☐ 失败</td></tr>
+    <tr><td>T4</td><td>异常路径</td><td>把某台 UFI 转维护（in_pool=0）再呼出</td><td>话务全部落到池内其余 UFI，无呼损</td><td>☐ 通过 ☐ 失败</td></tr>
+    <tr><td>T5</td><td>挂断</td><td>主叫先挂 / 被叫先挂各一次</td><td>话单时长正确，无僵尸话单</td><td>☐ 通过 ☐ 失败</td></tr>
+  </table>
+  <div class="tip"><span class="ic">💡</span><div>管理台两处可实时核对：「UFI 设备」看注册与 VoLTE 状态；「通信管理 → 线路总览」看实时通话流与每台 UFI 的呼叫计数。</div></div>
+</section>
+
+<!-- ═══════════ 7 链路分析 ═══════════ -->
+<section id="step5">
+  <h2><span class="no">7</span>第五步：实测后的链路分析</h2>
+  <p>测试完成后，进入「通信管理 → 线路总览 → 通话记录」，打开目标通话卡片。系统已把 <b>UFI 侧日志（volte / sip）与 dSIPRouter 侧呼叫日志（route）三侧联合展示</b>，一条通话的全过程无需跨系统翻日志。</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI','Microsoft YaHei',sans-serif" font-size="12">
+    <rect x="30" y="24" width="840" height="44" rx="10" fill="#22304a"/>
+    <text x="450" y="51" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">通话卡片 · CALL-1-7073277（示例）</text>
+    <!-- three columns -->
+    <g>
+      <rect x="30" y="90" width="264" height="270" rx="12" fill="#fdf3e7" stroke="#e8842c"/>
+      <text x="162" y="118" text-anchor="middle" fill="#c2651a" font-weight="700" font-size="13.5"># volte 侧（UFI 芯片层）</text>
+      <g font-family="Consolas,monospace" font-size="10.5" fill="#7a4a12">
+        <text x="46" y="146">VoLTE 注册 / 附着事件</text>
+        <text x="46" y="166">来电动摇铃 → 应答时刻</text>
+        <text x="46" y="186">语音承载建立（AMR-WB）</text>
+        <text x="46" y="206">挂断原因（无线侧）</text>
+      </g>
+      <text x="46" y="240" fill="#c2651a" font-weight="600" font-size="11.5">判断问题：SIM/基站/音频层</text>
+      <text x="46" y="258" fill="#5a6572" font-size="11">无振铃 → 查 VoLTE 与 SIM 状态</text>
+      <text x="46" y="276" fill="#5a6572" font-size="11">单通/无声 → 查音频承载</text>
+
+      <rect x="318" y="90" width="264" height="270" rx="12" fill="#eaf1fd" stroke="#2563eb"/>
+      <text x="450" y="118" text-anchor="middle" fill="#1d4ed8" font-weight="700" font-size="13.5"># sip 侧（UFI SIP 协议栈）</text>
+      <g font-family="Consolas,monospace" font-size="10.5" fill="#1e40af">
+        <text x="334" y="146">REGISTER / 401 → 200</text>
+        <text x="334" y="166">INVITE 收发与响应码</text>
+        <text x="334" y="186">SDP 协商（编码/地址）</text>
+        <text x="334" y="206">BYE / CANCEL 时序</text>
+      </g>
+      <text x="334" y="240" fill="#1d4ed8" font-weight="600" font-size="11.5">判断问题：设备↔dSIPRouter 段</text>
+      <text x="334" y="258" fill="#5a6572" font-size="11">无 INVITE → 呼叫没到设备</text>
+      <text x="334" y="276" fill="#5a6572" font-size="11">486/488 → 设备忙或拒接</text>
+
+      <rect x="606" y="90" width="264" height="270" rx="12" fill="#e8f7f0" stroke="#1e9e6a"/>
+      <text x="738" y="118" text-anchor="middle" fill="#17754f" font-weight="700" font-size="13.5"># route 侧（Kamailio acc 表）</text>
+      <g font-family="Consolas,monospace" font-size="10.5" fill="#14653f">
+        <text x="622" y="146">time | INVITE 200</text>
+        <text x="622" y="166">src 1002 → dst IMEI (ouser)</text>
+        <text x="622" y="186">gw: VOS3000 · callid: …</text>
+        <text x="622" y="206">按时间窗自动关联本通话</text>
+      </g>
+      <text x="622" y="240" fill="#17754f" font-weight="600" font-size="11.5">判断问题：选路与网关段</text>
+      <text x="622" y="258" fill="#5a6572" font-size="11">403/407 → 号段授权/认证</text>
+      <text x="622" y="276" fill="#5a6572" font-size="11">无记录 → 请求未到 Kamailio</text>
+    </g>
+    <text x="450" y="384" text-anchor="middle" fill="#5a6572" font-size="12">三侧按通话时间窗自动对齐：volte 定位无线层 · sip 定位接入层 · route 定位选路层</text>
+  </svg>
+  <div class="figcap">图 4 · 通话卡片三侧联合展示。</div>
+  </div>
+
+  <h3>分析步骤</h3>
+  <ol class="steps">
+    <li><b>先看结论列</b>：通话卡片顶部有方向、状态（接通/未接）、时长与结果；失败时优先读 route 侧的响应码。</li>
+    <li><b>按段定位</b>：用图 4 的分段法——route 侧无记录说明呼叫没进 Kamailio（查 VOS 授权/网络）；route 有 INVITE 但 sip 侧无 INVITE 说明 dSIPRouter→UFI 段断了（查设备在线与 dbaliases）；sip 侧有 INVITE 但 volte 侧不振铃查 SIM/VoLTE。</li>
+    <li><b>交叉验证采集日志</b>：「采集日志」tab 可按 IMEI + 时间区间筛选设备上传的日志文件；下发「日志采集」指令后，响应里可直接点击跳转（自带 IMEI）。</li>
+    <li><b>查设备异常事件</b>：「指令与日志 → 设备异常事件」记录心跳保活失败、SIP/VoLTE 掉线（含离线起止时间）、CPU 高负荷、存储紧张、SIM 锁定等，支持 IMEI + 时间区间检索——通话异常时段若与事件时间重合，根因基本锁定。</li>
+    <li><b>池级验证</b>：改过权重/并发后重复 T3，确认分流比例符合 <code>weight</code> 预期。</li>
+  </ol>
+
+  <h3>分析结论怎么记</h3>
+  <p>每个失败测试项按此格式回填到测试矩阵：</p>
+  <pre><b>现象</b>：T1 呼入无振铃（14:32 拨打）
+<b>定位</b>：route 侧无 INVITE 记录；sip 侧无 INVITE；volte 侧无事件
+<b>结论</b>：呼叫未到达 UFI —— VOS 话机 1002 DIDs 未含新 SIM 号
+<b>动作</b>：VOS 侧追加 DIDs（指引单 #2）→ 重载 → 14:41 复测通过</pre>
+</section>
+
+<!-- ═══════════ 8 排障 ═══════════ -->
+<section id="trouble">
+  <h2><span class="no">8</span>常见故障速查表</h2>
+  <table>
+    <tr><th style="width:230px">现象</th><th style="width:230px">先看哪里</th><th>常见原因 → 处理</th></tr>
+    <tr><td>设备监控里不出现新设备</td><td>WAF/Nginx 访问日志</td><td>设备无法出网 / 域名不通 → 检查 UFI 4G 上网与管理台可达性</td></tr>
+    <tr><td>sip-setting 返回 <code>401 sign invalid</code></td><td>附录签名机制</td><td>固件签名串与服务端 SKIP 集合不一致（现共跳过 7 字段）→ 升级固件或核对签名实现</td></tr>
+    <tr><td>SIP 注册失败 / 反复注册</td><td>设备监控 SIP 状态、Kamailio 日志</td><td>密码不匹配（应为 MD5(IMEI) 前 16 位）/ 域名端口错 → 重新触发 sip-setting 下发</td></tr>
+    <tr><td>呼入不通，坐席不振铃</td><td>route 侧 / VOS DIDs</td><td>dbaliases 缺映射 或 话机 1002 DIDs 未追加 SIM 号 → 补配置后重载</td></tr>
+    <tr><td>呼出 403</td><td>route 侧响应码</td><td>网关「dsip接入」呼出号段未授权该 SIM 号 → 白名单追加</td></tr>
+    <tr><td>通话单向无声 / 单通</td><td>volte 侧 + sip 侧 SDP</td><td>RTP 地址不通（NAT）/ 编码协商失败 → 检查 Kamailio RTP 引擎与防火墙 UDP 段</td></tr>
+    <tr><td>设备频繁离线</td><td>设备异常事件（离线起止时间）</td><td>4G 信号波动 / 设备重启 → 换位置或换卡；&gt;300s 离线会自动记录</td></tr>
+    <tr><td>话单有但时长为 0</td><td>三侧时间线对齐</td><td>应答信令未完成（早释）→ 看 sip 侧 200 与 ACK 时序</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════ 9 附录 ═══════════ -->
+<section id="appendix">
+  <h2><span class="no">9</span>附录：认证与签名机制</h2>
+
+  <h3>SIP 账号约定</h3>
+  <div class="kv">
+    <div>SIP 用户名</div><div>SIM 号（11 位手机号）</div>
+    <div>SIP 密码</div><div>MD5(IMEI) 的前 16 位（hex 小写），由服务端计算并在 sip-setting 应答中下发</div>
+    <div>SIP 服务器</div><div> sip_host : sip_port（默认 5060/UDP），sip-setting 自动下发</div>
+    <div>开户方式</div><div>auto_provision 开启时，设备首次 sip-setting 即自动创建 subscriber 账号</div>
+  </div>
+
+  <h3>HTTP 接口签名</h3>
+  <p>设备侧所有上报（sip-setting / status-push / log 等）都携带 <code>sign</code> 字段：对固定字段子集按 key 排序拼接后加 <code>secret_key</code> 做 SHA-256。要点：</p>
+  <ul>
+    <li>签名只覆盖<b>固定字段子集</b>，服务端与设备端保持同一跳过集合（当前 7 个：sign、encryptionType、mac、simOperator、operatorName、serviceCellBand、cellularSignalRsrp）</li>
+    <li>自洽验证法：取设备日志中的 hash 原始串，本地复算 SHA-256 对比，能精确暴露「差哪个字段」</li>
+    <li><code>secret_key</code> 存于 <code>dsip_ufi_config</code> 表（32 位），服务端与设备端必须一致</li>
+  </ul>
+
+  <h3>关键数据表</h3>
+  <table>
+    <tr><th style="width:220px">表 / 来源</th><th>内容</th></tr>
+    <tr><td><code>dsip_ufi_device</code></td><td>设备台账与最新状态快照（在线、信号、CPU/存储、buildNumber…）</td></tr>
+    <tr><td><code>dsip_ufi_pool</code></td><td>通信属性：sim / pool_id / enabled / in_pool / weight / max_concurrent / note</td></tr>
+    <tr><td><code>dsip_ufi_call / sms / event / file</code></td><td>通话、短信、异常事件、采集日志文件记录</td></tr>
+    <tr><td><code>kamailio.dbaliases</code></td><td>呼入号码映射（SIM 号 → 1002）</td></tr>
+    <tr><td><code>kamailio.acc</code></td><td>route 侧呼叫日志（通话卡片第三栏的数据源）</td></tr>
+  </table>
+
+  <h3>相关 API</h3>
+  <table>
+    <tr><th style="width:320px">接口</th><th>用途</th></tr>
+    <tr><td><code>POST /api/ufi/sip-setting</code></td><td>设备取配置（自动开户 + 下发 SIP 参数）</td></tr>
+    <tr><td><code>POST /api/ufi/register-status-push</code></td><td>设备状态/心跳上报</td></tr>
+    <tr><td><code>GET /api/v1/ufi/devices</code></td><td>设备列表（设备监控页数据源）</td></tr>
+    <tr><td><code>GET /api/v1/ufi/comm</code> · <code>PUT /api/v1/ufi/comm/&lt;imei&gt;</code> · <code>POST /api/v1/ufi/comm/bulk</code></td><td>通信属性读 / 单台写 / 批量操作</td></tr>
+    <tr><td><code>DELETE /api/v1/ufi/devices/&lt;imei&gt;</code></td><td>删除设备及全部关联数据</td></tr>
+  </table>
+</section>
+
+<footer>UFI 接入教程 · 生成于 2026-10-07 · 管理台 https://ufi.mineo.top（/ufi 设备监控 · /ufi-callcenter 通信管理）</footer>
+</div>
+</body>
+</html>

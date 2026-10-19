@@ -398,6 +398,17 @@ def addUpdateCarriers(data=None):
             raise http_exceptions.BadRequest("Endpoint hostname/address is malformed")
         host_addr = safeStripPort(sip_addr)
 
+        # 通话运营商组 IP 白名单（开启后仅允许名单内 IP 对接）
+        try:
+            from modules.api.ufi_whitelist import is_carrier_ip_allowed
+            ok_c, err_c = is_carrier_ip_allowed(db, host_addr)
+            if not ok_c:
+                raise http_exceptions.BadRequest(err_c or "Carrier IP not in whitelist")
+        except http_exceptions.BadRequest:
+            raise
+        except Exception:
+            pass
+
         # Adding
         if len(gwid) <= 0:
             if len(gwgroup) > 0:

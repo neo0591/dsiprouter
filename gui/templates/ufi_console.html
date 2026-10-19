@@ -1,0 +1,50 @@
+{% extends 'fullwidth_layout.html' %}
+
+{% block title %}{{ _('UFI Devices') }}{% endblock %}
+
+{% block custom_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='ufi-console/tokens.css') }}?v={{ staticAssetVersion('ufi-console/tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ufi-console/app.css') }}?v={{ staticAssetVersion('ufi-console/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ufi-console/embed.css') }}?v={{ staticAssetVersion('ufi-console/embed.css') }}">
+{% endblock %}
+
+{% block body %}
+<div class="ufi-console">
+  <nav class="ufi-view-tabs" aria-label="UFI 视图">
+    <button type="button" class="ufi-tab is-active" data-view="overview">运行总览</button>
+    <button type="button" class="ufi-tab" data-view="devices">设备监控 <span class="tab-count" id="navDeviceCount">0</span></button>
+    <button type="button" class="ufi-tab" data-view="commands">指令与日志 <span class="tab-count is-alert" id="navAlertCount">0</span></button>
+    <button type="button" class="ufi-tab" data-view="records">通话与短信 <span class="tab-count" id="navCallCount">0</span>/<span class="tab-count" id="navSmsCount">0</span></button>
+    <button type="button" class="ufi-tab" data-view="devlogs">采集日志 <span class="tab-count" id="navLogCount">0</span></button>
+    <div class="ufi-view-tabs__meta">
+      <button type="button" class="btn btn--sm" id="btnPlatform">平台配置</button>
+      <button type="button" class="btn btn--sm" id="btnPause" aria-pressed="true"><span>实时</span></button>
+      <button type="button" class="btn btn--sm" id="btnRefresh">刷新</button>
+    </div>
+  </nav>
+  <div class="ufi-platform" id="ufiPlatform">
+    <form id="ufi-config-form">
+      <label>API secret<input id="cfg_secret" autocomplete="off"></label>
+      <label>SIP host<input id="cfg_sip_host"></label>
+      <label>SIP port<input id="cfg_sip_port" type="number"></label>
+      <label>Transport
+        <select id="cfg_transport"><option>UDP</option><option>TCP</option></select>
+      </label>
+      <label>自动开户
+        <select id="cfg_auto">
+          <option value="1">开启</option>
+          <option value="0">关闭</option>
+        </select>
+      </label>
+      <button type="submit" class="btn btn--primary">保存平台配置</button>
+    </form>
+  </div>
+  {% include '_ufi_console_body.html' %}
+</div>
+{% endblock %}
+
+{% block custom_js %}
+  <script src="{{ url_for('static', filename='ufi-console/icons.js') }}?v={{ staticAssetVersion('ufi-console/icons.js') }}"></script>
+  <script src="{{ url_for('static', filename='ufi-console/data.js') }}?v={{ staticAssetVersion('ufi-console/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='ufi-console/app.js') }}?v={{ staticAssetVersion('ufi-console/app.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,137 @@
+/* ============================================================================
+   UFI Management Console — Design Tokens
+   Extends the dSIPRouter visual identity (dark chrome + amber accent)
+   System: "Cyber Blueprint" — dark command chrome, light data plane
+   ========================================================================= */
+
+:root {
+  /* ---------- Brand / Chrome (inherited from dSIPRouter) ---------- */
+  --dsip-nav:            #222222;   /* navbar background */
+  --dsip-nav-hover:      #333333;
+  --dsip-side:           #404040;   /* sidebar background */
+  --dsip-side-line:      #4b4a5e;   /* sidebar divider */
+  --dsip-accent:         #F0AD4E;   /* amber — selected / active */
+  --dsip-accent-soft:    #FFB266;   /* amber light — brand text */
+  --dsip-link:           #c4c4c5;   /* sidebar idle link */
+  --dsip-link-dim:       #9d9d9d;
+  --dsip-blue:           #2188B0;   /* informational button */
+  --dsip-orange:         #fd7e14;   /* attention button */
+  --dsip-orange-dark:    #e66a00;
+
+  /* ---------- Semantic status ---------- */
+  --st-ok:               #2f9e44;   /* registered / connected */
+  --st-ok-bg:            #ebfbee;
+  --st-ok-line:          #b2f2bb;
+
+  --st-warn:             #e8590c;   /* volatile / degrading */
+  --st-warn-bg:          #fff4e6;
+  --st-warn-line:        #ffd8a8;
+
+  --st-err:              #e03131;   /* failed / critical */
+  --st-err-bg:           #fff5f5;
+  --st-err-line:         #ffc9c9;
+
+  --st-idle:             #868e96;   /* offline / unknown */
+  --st-idle-bg:          #f1f3f5;
+  --st-idle-line:        #dee2e6;
+
+  /* ---------- Data plane (light) ---------- */
+  --bg-app:              #f4f6f9;   /* page background (dsip login tone) */
+  --bg-surface:          #ffffff;
+  --bg-sunken:           #f8f9fb;
+  --bg-hover:            #fffbf2;   /* amber-tinted row hover */
+  --bg-selected:         #fff6e6;
+
+  --line:                #e3e6ea;
+  --line-strong:         #ced4da;
+
+  --tx-1:                #1a1d21;   /* primary text */
+  --tx-2:                #495057;   /* secondary */
+  --tx-3:                #868e96;   /* tertiary / labels */
+  --tx-inv:              #ffffff;
+
+  /* ---------- Signal / band quality ramp ---------- */
+  --sig-0:               #ced4da;   /* no signal */
+  --sig-1:               #e03131;   /* poor */
+  --sig-2:               #f08c00;   /* fair */
+  --sig-3:               #74b816;   /* good */
+  --sig-4:               #2f9e44;   /* excellent */
+
+  /* ---------- Network type accents ---------- */
+  --net-5g:              #7048e8;
+  --net-4g:              #1971c2;
+  --net-3g:              #0c8599;
+  --net-wifi:            #2f9e44;
+  --net-eth:             #495057;
+  --net-none:            #adb5bd;
+
+  /* ---------- Typography ---------- */
+  --ff-ui: "Inter", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --ff-num: "JetBrains Mono", "SF Mono", "Cascadia Mono", Consolas, monospace;
+
+  --fs-2xs: 10px;
+  --fs-xs:  11px;
+  --fs-sm:  12px;
+  --fs-md:  13px;
+  --fs-lg:  15px;
+  --fs-xl:  18px;
+  --fs-2xl: 22px;
+  --fs-3xl: 28px;
+
+  --fw-reg: 400;
+  --fw-med: 500;
+  --fw-semi: 600;
+  --fw-bold: 700;
+
+  /* ---------- Spacing (4px base) ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* ---------- Radius ---------- */
+  --r-xs: 3px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-pill: 999px;
+
+  /* ---------- Elevation ---------- */
+  --sh-xs: 0 1px 2px rgba(16, 24, 40, .04);
+  --sh-sm: 0 1px 3px rgba(16, 24, 40, .08), 0 1px 2px rgba(16, 24, 40, .04);
+  --sh-md: 0 4px 10px -2px rgba(16, 24, 40, .10), 0 2px 4px -2px rgba(16, 24, 40, .06);
+  --sh-lg: 0 16px 32px -8px rgba(16, 24, 40, .18), 0 4px 10px -4px rgba(16, 24, 40, .08);
+  --sh-focus: 0 0 0 3px rgba(33, 136, 176, .22);
+
+  /* ---------- Layout ---------- */
+  --w-side: 216px;
+  --w-side-collapsed: 56px;
+  --h-nav: 48px;
+  --h-toolbar: 52px;
+  --h-row: 44px;
+
+  /* ---------- Motion ---------- */
+  --mo-fast: 120ms cubic-bezier(.4, 0, .2, 1);
+  --mo-base: 200ms cubic-bezier(.4, 0, .2, 1);
+  --mo-slow: 320ms cubic-bezier(.16, 1, .3, 1);
+
+  --z-sticky: 20;
+  --z-drop: 60;
+  --z-toast: 90;
+  --z-modal: 100;
+}
+
+/* Reduced-motion contract: honour user preference across the whole system */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

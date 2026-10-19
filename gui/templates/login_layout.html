@@ -1,6 +1,6 @@
 {% from 'util.jinja2.html' import link_tag, script_tag, tracked_link %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ CURRENT_LANGUAGE }}">
 	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <head>
   <meta charset="utf-8">
@@ -16,6 +16,14 @@
 </head>
 
 <body>
+
+  <div class="login-lang-switcher">
+    {% for code, label in SUPPORTED_LANGUAGES.items() %}
+      <a class="login-lang-link{% if code == CURRENT_LANGUAGE %} active{% endif %}"
+         href="{{ url_for('set_language', lang=code, next=request.full_path) }}">{{ label }}</a>
+      {% if not loop.last %}<span class="login-lang-sep">|</span>{% endif %}
+    {% endfor %}
+  </div>
 
   <div class="container">
     {% block body %}

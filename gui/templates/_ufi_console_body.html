@@ -1,0 +1,700 @@
+<main class="main">
+
+    <!-- ─────── VIEW 1 : OVERVIEW ─────── -->
+    <section class="view is-active" id="view-overview" role="tabpanel" aria-label="运行总览">
+      <div class="page-head">
+        <div class="page-head__text">
+          <h1 class="page-title">运行总览</h1>
+          <p class="page-desc">全量 UFI 设备核心网 / VoLTE / SIP 注册状态与信号质量实时态势，数据源为 <code>register-status-push</code>（10 秒推送）。</p>
+        </div>
+        <div class="page-head__actions">
+          <button class="btn" id="btnExportOverview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></svg>
+            导出快照
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI strip -->
+      <div class="kpi-strip" id="kpiStrip"></div>
+
+      <!-- health + signal -->
+      <div class="panel-grid">
+        <div class="panel">
+          <div class="panel__head">
+            <h2 class="panel__title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14L16 12h5"/></svg>
+              设备健康分布
+            </h2>
+            <span class="panel__sub">按健康度评分分档，点击 KPI 卡片可下钻</span>
+          </div>
+          <div class="panel__body">
+            <div class="dist" id="healthDist"></div>
+            <div class="u-mt-4" style="border-top:1px dashed var(--line);padding-top:var(--sp-3)">
+              <div class="u-fs-xs muted u-mb-2" style="letter-spacing:.4px;text-transform:uppercase;font-weight:600">主要异常分布</div>
+              <div class="minilist" id="healthIssues"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel__head">
+            <h2 class="panel__title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 19h.01"/><path d="M8.5 19v-4"/><path d="M13 19v-8"/><path d="M17.5 19v-12"/></svg>
+              信号强度分布
+            </h2>
+          </div>
+          <div class="panel__body">
+            <div class="sigchart" id="sigChart"></div>
+            <div class="u-fs-xs muted u-mt-3" style="text-align:center">对应字段 cellularSignalLevel（0 无信号 / 1 差 / 2 中 / 3 好）</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- operators + bands + nettypes -->
+      <div class="panel-grid" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="panel">
+          <div class="panel__head"><h2 class="panel__title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12v9"/><path d="M4 5a11 11 0 0 0 0 12"/><path d="M20 5a11 11 0 0 1 0 12"/><circle cx="12" cy="10" r="2"/></svg>
+            驻网归属 TOP</h2></div>
+          <div class="panel__body"><div class="minilist" id="operatorList"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel__head"><h2 class="panel__title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 7.5 12 12l9-4.5L12 3Z"/><path d="M3 12.5 12 17l9-4.5"/></svg>
+            Band 分布</h2></div>
+          <div class="panel__body"><div class="minilist" id="bandList"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel__head"><h2 class="panel__title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8.5a15 15 0 0 1 19 0"/><path d="M6 12.2a9.5 9.5 0 0 1 12 0"/><path d="M9.5 15.8a4.5 4.5 0 0 1 5 0"/><path d="M12 19.5h.01"/></svg>
+            网络类型（cellularStatus）</h2></div>
+          <div class="panel__body"><div class="minilist" id="netTypeList"></div></div>
+        </div>
+      </div>
+
+      <!-- event feed -->
+      <div class="panel">
+        <div class="panel__head">
+          <h2 class="panel__title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1 1 12 0c0 4.5 1.5 6 1.5 6h-15S6 13.5 6 9Z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
+            实时事件流
+          </h2>
+          <span class="panel__sub">通话 · 短信 · 拒接 · 心跳掉线 · SIP/VoLTE</span>
+        </div>
+        <div class="panel__body"><div class="feed" id="eventFeed"></div></div>
+      </div>
+    </section>
+
+    <!-- ─────── VIEW 2 : DEVICES ─────── -->
+    <section class="view" id="view-devices" role="tabpanel" aria-label="设备监控">
+      <div class="page-head">
+        <div class="page-head__text">
+          <h1 class="page-title">设备监控</h1>
+          <p class="page-desc">全量设备实时状态表 · 支持多维度筛选、排序、批量指令下发与日志拉取。IMEI 与操作列已冻结，横向滚动时保持可见。</p>
+        </div>
+      </div>
+
+      <!-- toolbar -->
+      <div class="toolbar">
+        <div class="input-group">
+          <svg class="input-group__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+          <input class="input" id="devSearch" placeholder="搜索 IMEI / SN / IMSI / 号码 / 运营商…" aria-label="搜索设备">
+          <button class="input-group__clear" id="devSearchClear" title="清空" aria-label="清空搜索">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+
+        <div class="filter-chips" id="sevChips">
+          <button class="chip" data-sev="ok">健康 <span class="chip__n">0</span></button>
+          <button class="chip" data-sev="warn">预警 <span class="chip__n">0</span></button>
+          <button class="chip" data-sev="err">严重 <span class="chip__n">0</span></button>
+        </div>
+
+        <span class="nav-sep" style="background:var(--line);height:22px"></span>
+
+        <label class="switch" title="仅显示 VoLTE 已注册设备">
+          <input type="checkbox" id="fRegVolte"><span class="switch__track"></span>
+          <span class="switch__label">VoLTE 已注册</span>
+        </label>
+        <label class="switch" title="仅显示 SIP 已注册设备">
+          <input type="checkbox" id="fRegSip"><span class="switch__track"></span>
+          <span class="switch__label">SIP 已注册</span>
+        </label>
+
+        <div class="toolbar__spacer"></div>
+        <button class="btn" id="btnResetFilters">重置</button>
+        <button class="btn btn--primary" id="btnExportCsv">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></svg>
+          导出 CSV
+        </button>
+      </div>
+
+      <!-- second filter row -->
+      <div class="toolbar" style="border-top:0;border-radius:0;padding-top:0">
+        <div class="filter-chips" id="netChips">
+          <button class="chip" data-net="5G">5G <span class="chip__n">0</span></button>
+          <button class="chip" data-net="4G">LTE <span class="chip__n">0</span></button>
+          <button class="chip" data-net="3G">3G <span class="chip__n">0</span></button>
+          <button class="chip" data-net="WLAN">WLAN <span class="chip__n">0</span></button>
+          <button class="chip" data-net="NONE">无服务 <span class="chip__n">0</span></button>
+          <button class="chip" data-net="Flight mode">飞行 <span class="chip__n">0</span></button>
+        </div>
+
+        <span class="nav-sep" style="background:var(--line);height:22px"></span>
+
+        <div class="filter-chips" id="sigChips">
+          <button class="chip" data-sig="0">无信号 <span class="chip__n">0</span></button>
+          <button class="chip" data-sig="1">差 <span class="chip__n">0</span></button>
+          <button class="chip" data-sig="2">中 <span class="chip__n">0</span></button>
+          <button class="chip" data-sig="3">好 <span class="chip__n">0</span></button>
+        </div>
+
+        <div class="toolbar__spacer"></div>
+        <select class="select" id="fOp" style="width:180px" aria-label="运营商筛选"><option value="">全部运营商</option></select>
+        <select class="select" id="fBand" style="width:150px" aria-label="Band 筛选"><option value="">全部 Band</option></select>
+      </div>
+
+      <!-- active filter summary -->
+      <div class="filterbar u-hidden" id="filterbar">
+        <span>当前条件：</span><span class="filter-chips" id="filterTags"></span>
+        <span class="text-muted">共匹配 <strong id="filterCount">0</strong> 台</span>
+      </div>
+
+      <!-- batch bar -->
+      <div class="batchbar" id="batchbar">
+        <span>已选择 <strong id="batchCount">0</strong> 台设备</span>
+        <span class="batchbar__spacer"></span>
+        <button class="btn btn--sm" data-batch="cmd"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>下发指令</button>
+        <button class="btn btn--sm" data-batch="esim"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>下发 eSIM</button>
+        <button class="btn btn--sm" data-batch="logs"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M9 13h6M9 16.5h4"/></svg>日志操作</button>
+        <button class="btn btn--sm" data-batch="export">导出选中</button>
+        <button class="btn btn--sm" data-batch="reboot"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>批量重启</button>
+        <button class="btn btn--sm" data-batch="clear">取消选择</button>
+      </div>
+
+      <!-- table -->
+      <div class="table-scroll" id="tableScroll">
+        <table class="grid">
+          <thead id="gridHead"></thead>
+          <tbody id="gridBody"></tbody>
+        </table>
+      </div>
+
+      <!-- pager -->
+      <div class="pager">
+        <span class="pager__info" id="pagerInfo"></span>
+        <span class="pager__spacer"></span>
+        <label class="u-row u-gap-2" style="font-size:var(--fs-sm)">
+          每页
+          <select class="select" id="pageSize" aria-label="每页条数">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+          </select>
+        </label>
+        <span class="page-list" id="pageList"></span>
+      </div>
+    </section>
+
+    <!-- ─────── VIEW 3 : COMMANDS ─────── -->
+    <section class="view" id="view-commands" role="tabpanel" aria-label="指令与日志">
+      <div class="page-head">
+        <div class="page-head__text">
+          <h1 class="page-title">指令与日志中心</h1>
+          <p class="page-desc">面向批量设备的运维操作台：远程控制 <code>Ufi-Get-Cmd-Request</code>、日志 <code>Ufi-Get-Log-Request</code>、eSIM <code>Ufi-Get-ESIM-Request</code> 均通过 WebSocket 下发。</p>
+        </div>
+      </div>
+
+      <!-- ops KPI -->
+      <div class="kpi-strip" id="tcStats" style="grid-template-columns:repeat(6,minmax(0,1fr))"></div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <h2 class="panel__title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><path d="M12 16.5h.01"/><path d="M10.2 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.8 3.9a2 2 0 0 0-3.6 0Z"/></svg>
+            待处理队列
+          </h2>
+          <span class="panel__sub">按健康度升序排列，优先处理最严重的设备</span>
+          <div class="panel__actions">
+            <button class="btn btn--sm" id="tcRefresh">刷新队列</button>
+          </div>
+        </div>
+        <div class="panel__body panel__body--flush">
+          <div style="max-height:520px;overflow:auto">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th class="col-ident" scope="col">IMEI / SN</th>
+                  <th scope="col">待处理问题</th>
+                  <th scope="col">驻网</th>
+                  <th scope="col">信号</th>
+                  <th scope="col">SIP</th>
+                  <th scope="col">健康度</th>
+                  <th class="col-actions u-text-r" scope="col">操作</th>
+                </tr>
+              </thead>
+              <tbody id="tcList"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- device status-change alerts -->
+      <div class="panel">
+        <div class="panel__head">
+          <h2 class="panel__title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            设备异常事件
+          </h2>
+          <div class="u-row u-gap-2" style="flex:1;align-items:center;margin-left:14px;flex-wrap:wrap">
+            <div class="input-group" style="max-width:220px">
+              <svg class="input-group__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+              <input class="input" id="alertSearch" placeholder="搜索 IMEI…" aria-label="搜索 IMEI">
+            </div>
+            <input class="input" id="alertFrom" type="date" aria-label="开始日期" title="开始日期" style="max-width:145px">
+            <span class="muted" style="flex:none">~</span>
+            <input class="input" id="alertTo" type="date" aria-label="结束日期" title="结束日期" style="max-width:145px">
+            <button class="btn btn--sm" id="alertSearchClear" type="button" title="清空筛选">清空</button>
+          </div>
+          <span class="panel__sub" id="alertCount"></span>
+        </div>
+        <div class="panel__body panel__body--flush">
+          <div style="max-height:420px;overflow:auto">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th scope="col" style="width:170px">时间</th>
+                  <th scope="col" style="width:150px">IMEI</th>
+                  <th scope="col" style="width:190px">事件</th>
+                  <th scope="col">详情</th>
+                </tr>
+              </thead>
+              <tbody id="alertList"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────── VIEW 4 : RECORDS ─────── -->
+    <section class="view" id="view-records" role="tabpanel" aria-label="通话与短信">
+      <div class="page-head">
+        <div class="page-head__text">
+          <h1 class="page-title">通话与短信记录</h1>
+          <p class="page-desc">设备上报的通话 / 短信记录；采集日志已独立为「采集日志」页（支持 IMEI 检索）。</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head" style="padding-bottom:0;border-bottom:0">
+          <div class="tabs" id="recTabs" style="margin-bottom:0;border-bottom:0;flex:1">
+            <button class="tab is-active" data-rtab="calls">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 20.5A14 14 0 0 1 3.5 8.5 2 2 0 0 1 5.4 6.5l2.2-.4 1.6 3.6-1.7 1.4a11 11 0 0 0 5.4 5.4l1.4-1.7 3.6 1.6-.4 2.2a2 2 0 0 1-2 1.9Z"/></svg>
+              通话记录
+            </button>
+            <button class="tab" data-rtab="sms">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a7.5 7.5 0 0 1-11 6.7L4 20l1.3-4A7.5 7.5 0 1 1 20 12Z"/></svg>
+              短信 / 彩信记录
+            </button>
+          </div>
+        </div>
+        <div class="panel__head" style="border-bottom:1px solid var(--line);padding-top:var(--sp-3)">
+          <div class="filter-chips" id="recFilterTabs">
+            <button class="chip is-on" data-rf="all">全部</button>
+            <button class="chip" data-rf="ok">成功 / 接通</button>
+            <button class="chip" data-rf="fail">失败 / 未接通</button>
+            <button class="chip" data-rf="reject">拒接</button>
+            <button class="chip" data-rf="mms">彩信</button>
+            <button class="chip" data-rf="call">通话类</button>
+            <button class="chip" data-rf="sms">短信类</button>
+          </div>
+          <div class="u-row u-gap-2" style="align-items:center;flex:none;margin-left:auto">
+            <input class="input" id="recFrom" type="date" aria-label="开始日期" title="开始日期" style="max-width:145px">
+            <span class="muted" style="flex:none">~</span>
+            <input class="input" id="recTo" type="date" aria-label="结束日期" title="结束日期" style="max-width:145px">
+            <button class="btn btn--sm" id="recSearchClear" type="button" title="清空时间筛选">清空</button>
+          </div>
+          <div class="panel__actions">
+            <span class="panel__sub" id="recCount">最多展示最近 60 条</span>
+          </div>
+        </div>
+        <div class="panel__body">
+          <div class="feed" id="recBody"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────── VIEW 5 : DEVICE COLLECTED LOGS ─────── -->
+    <section class="view" id="view-devlogs" role="tabpanel" aria-label="采集日志">
+      <div class="page-head">
+        <div class="page-head__text">
+          <h1 class="page-title">采集日志</h1>
+          <p class="page-desc">设备拉取日志后压缩回传的文件（<code>Ufi-Get-Log-Request</code> → <code>/ufi-app/api/ufi/upload-file</code>），支持按 IMEI / 文件名检索、在线下载。</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head" style="border-bottom:1px solid var(--line)">
+          <div class="input-group" style="flex:1;max-width:300px">
+            <svg class="input-group__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+            <input class="input" id="devlogSearch" placeholder="搜索 IMEI 或文件名…" aria-label="搜索日志文件">
+          </div>
+          <div class="u-row u-gap-2" style="align-items:center;flex:none">
+            <input class="input" id="devlogFrom" type="date" aria-label="开始日期" title="开始日期" style="max-width:145px">
+            <span class="muted" style="flex:none">~</span>
+            <input class="input" id="devlogTo" type="date" aria-label="结束日期" title="结束日期" style="max-width:145px">
+            <button class="btn btn--sm" id="devlogSearchClear" type="button" title="清空筛选">清空</button>
+          </div>
+          <div class="panel__actions">
+            <span class="panel__sub" id="devlogCount"></span>
+          </div>
+        </div>
+        <div class="panel__body">
+          <div class="feed" id="devlogBody"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+<!-- ══════════════════ DRAWER : device detail ══════════════════ -->
+<div class="drawer-scrim" id="drawerScrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="设备详情" aria-hidden="true">
+  <header class="drawer__head">
+    <div>
+      <div class="drawer__id" id="drawerId">—</div>
+      <div class="drawer__meta" id="drawerMeta">—</div>
+    </div>
+    <div class="drawer__head-actions" id="drawerHeadActions">
+      <button class="btn btn--sm" data-dact="admin" style="border-color:#3a3a3a;background:transparent;color:#c4c4c5" title="云端反向打开设备管理台">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z"/></svg>
+        远程管理
+      </button>
+      <button class="btn btn--sm" data-dact="esim" style="border-color:#3a3a3a;background:transparent;color:#c4c4c5" title="下发 eSIM Profile">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
+        下发 eSIM
+      </button>
+      <button class="btn btn--sm" data-dact="cmd" style="border-color:#3a3a3a;background:transparent;color:#c4c4c5">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        下发指令
+      </button>
+      <button class="btn btn--sm" data-dact="log" style="border-color:#3a3a3a;background:transparent;color:#c4c4c5">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/></svg>
+        获取日志
+      </button>
+      <button class="btn btn--sm" data-dact="settings" style="border-color:#3a3a3a;background:transparent;color:#c4c4c5">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M4 6h6M18 6h2M4 12h2M12 12h8M4 18h10M18 18h2"/></svg>
+        设备设置
+      </button>
+      <button class="drawer__close" id="drawerClose" aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="drawer__body" id="drawerBody">
+    <div class="specgrid u-mb-4" id="drawerStrip"></div>
+
+    <div class="tabs" id="drawerTabs">
+      <button class="tab is-active" data-tab="spec">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.5 12a7.5 7.5 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-2-1.2L14.7 3H9.3l-.4 2.7a7.6 7.6 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7.5 7.5 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7.6 7.6 0 0 0 2 1.2l.4 2.7h5.4l.4-2.7a7.6 7.6 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"/></svg>
+        设备参数
+      </button>
+      <button class="tab" data-tab="reg">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h3l2-5 3 10 2-5h6"/></svg>
+        注册状态
+      </button>
+      <button class="tab" data-tab="calls">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 20.5A14 14 0 0 1 3.5 8.5 2 2 0 0 1 5.4 6.5l2.2-.4 1.6 3.6-1.7 1.4a11 11 0 0 0 5.4 5.4l1.4-1.7 3.6 1.6-.4 2.2a2 2 0 0 1-2 1.9Z"/></svg>
+        通话记录 <span class="tab__n" id="tabCallsN">0</span>
+      </button>
+      <button class="tab" data-tab="sms">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a7.5 7.5 0 0 1-11 6.7L4 20l1.3-4A7.5 7.5 0 1 1 20 12Z"/></svg>
+        短信记录 <span class="tab__n" id="tabSmsN">0</span>
+      </button>
+      <button class="tab" data-tab="logs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M9 13h6M9 16.5h4"/></svg>
+        关键日志 <span class="tab__n" id="tabLogsN">0</span>
+      </button>
+    </div>
+
+    <div class="tabpane is-active" data-pane="spec" id="paneSpec"></div>
+    <div class="tabpane" data-pane="reg" id="paneReg"></div>
+    <div class="tabpane" data-pane="calls" id="paneCalls"></div>
+    <div class="tabpane" data-pane="sms" id="paneSms"></div>
+    <div class="tabpane" data-pane="logs" id="paneLogs"></div>
+  </div>
+</aside>
+
+<!-- ══════════════════ MODAL : command dispatch ══════════════════ -->
+<div class="modal-scrim" id="modalCmd">
+  <div class="ufi-dialog ufi-dialog--wide" role="dialog" aria-modal="true" aria-label="下发远程控制指令">
+    <header class="modal__head">
+      <div>
+        <h3 class="modal__title">下发远程控制指令</h3>
+        <p class="modal__desc">msgType = <code>Ufi-Get-Cmd-Request</code> · 目标 <b id="cmdTargetCount">0</b> 台设备</p>
+      </div>
+      <button class="modal__close" data-close aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+    <div class="modal__body">
+      <div class="u-row u-wrap u-gap-1 u-mb-4" id="cmdTargetList"></div>
+      <div class="form-section">
+        <div class="form-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          选择命令
+        </div>
+        <div class="cmdlist" id="cmdList"></div>
+      </div>
+      <div id="cmdFields"></div>
+      <div class="form-section u-mb-0">
+        <div class="form-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M9 13h6"/></svg>
+          报文预览
+        </div>
+        <div class="console" id="cmdConsole"></div>
+      </div>
+    </div>
+    <footer class="modal__foot">
+      <span class="u-fs-xs muted">sign = sha256(业务字段按 key 升序拼接 &amp; secret_key)</span>
+      <span class="modal__foot-spacer"></span>
+      <button class="btn" data-close>取消</button>
+      <button class="btn btn--primary" id="cmdSend">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l7.5 3L14 21l7-18Z"/><path d="M10.5 13.5 21 3"/></svg>
+        下发指令
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- ══════════════════ MODAL : eSIM profile ══════════════════ -->
+<div class="modal-scrim" id="modalEsim">
+  <div class="ufi-dialog ufi-dialog--wide" role="dialog" aria-modal="true" aria-label="下发 eSIM Profile">
+    <header class="modal__head">
+      <div>
+        <h3 class="modal__title">下发 eSIM Profile</h3>
+        <p class="modal__desc">msgType = <code>Ufi-Get-ESIM-Request</code> · 目标 <b id="esimTargetCount">0</b> 台设备</p>
+      </div>
+      <button class="modal__close" data-close aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+    <div class="modal__body">
+      <div class="u-row u-wrap u-gap-1 u-mb-4" id="esimTargetList"></div>
+      <div class="form-section">
+        <div class="form-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
+          激活码 / LPA
+        </div>
+        <div class="field">
+          <label class="field__label" for="esimMessage">esimMessage <span class="field__req">*</span></label>
+          <textarea class="input" id="esimMessage" rows="3" placeholder="LPA:1$T-MOBILE.IDEMIA.IO$RPFEC-T71IU-EI1FM-9A2FE" style="font-family:var(--ff-num);font-size:var(--fs-sm);resize:vertical"></textarea>
+          <span class="field__hint">标准格式 <code>LPA:1$&lt;SM-DP+地址&gt;$&lt;MatchingID&gt;</code>。经 WebSocket 下发后由设备下载并安装 Profile。</span>
+        </div>
+      </div>
+      <div class="form-section u-mb-0">
+        <div class="form-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          报文预览
+        </div>
+        <div class="console" id="esimConsole"></div>
+      </div>
+    </div>
+    <footer class="modal__foot">
+      <span class="u-fs-xs muted">设备需 WebSocket 在线</span>
+      <span class="modal__foot-spacer"></span>
+      <button class="btn" data-close>取消</button>
+      <button class="btn btn--primary" id="esimSend">下发 eSIM</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ══════════════════ MODAL : log ops ══════════════════ -->
+<div class="modal-scrim" id="modalLog">
+  <div class="ufi-dialog" role="dialog" aria-modal="true" aria-label="日志操作">
+    <header class="modal__head">
+      <div>
+        <h3 class="modal__title">日志操作</h3>
+        <p class="modal__desc">msgType = <code>Ufi-Get-Log-Request</code> · 目标 <b id="logTargetCount">0</b> 台设备</p>
+      </div>
+      <button class="modal__close" data-close aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+    <div class="modal__body">
+      <div class="form-section">
+        <div class="form-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M9 13h6M9 16.5h4"/></svg>
+          选择操作
+        </div>
+        <div class="cmdlist" id="logCmdFields"></div>
+        <div class="field u-mt-3 u-hidden" id="logDaysWrap">
+          <label class="field__label" for="logDays">拉取天数（days）</label>
+          <select class="select" id="logDays">
+            <option value="1" selected>1 天（当天，默认）</option>
+            <option value="2">2 天</option>
+            <option value="3">3 天</option>
+            <option value="4">4 天（本地归档上限）</option>
+          </select>
+          <span class="field__hint">有效范围 1～4；仅 cmd=pull 时生效。日志达到阈值后设备侧压缩并本地归档，保留最近 4 天。</span>
+        </div>
+      </div>
+      <div class="form-section u-mb-0">
+        <div class="form-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          报文预览
+        </div>
+        <div class="console" id="logConsole"></div>
+      </div>
+    </div>
+    <footer class="modal__foot">
+      <span class="modal__foot-spacer"></span>
+      <button class="btn" data-close>取消</button>
+      <button class="btn btn--primary" id="logSend">执行</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ══════════════════ MODAL : device settings ══════════════════ -->
+<div class="modal-scrim" id="modalSet">
+  <div class="ufi-dialog ufi-dialog--wide" role="dialog" aria-modal="true" aria-label="设备设置">
+    <header class="modal__head">
+      <div>
+        <h3 class="modal__title">设备设置</h3>
+        <p class="modal__desc">msgType = <code>Ufi-Set-Request</code> · 目标 <b id="setTargetCount">0</b> 台 · <span id="setTargetHint" class="mono-sm"></span></p>
+      </div>
+      <button class="modal__close" data-close aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+    <div class="modal__body">
+      <div class="form-section">
+        <div class="form-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4 4 0 0 0 5.7 0l2.8-2.8a4 4 0 0 0-5.7-5.7L11.5 6.3"/><path d="M14 10.5a4 4 0 0 0-5.7 0L5.5 13.3a4 4 0 0 0 5.7 5.7l1.3-1.3"/></svg>
+          SIP Server 下发
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label class="field__label" for="sSipAddr">SIP Server 地址</label>
+            <input class="input" id="sSipAddr" placeholder="192.168.1.168">
+          </div>
+          <div class="field">
+            <label class="field__label" for="sSipPort">SIP Server 端口</label>
+            <input class="input input--num" id="sSipPort" placeholder="5060">
+          </div>
+          <div class="field">
+            <label class="field__label" for="sTransport">传输协议</label>
+            <select class="select" id="sTransport"><option>UDP</option><option>TCP</option></select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="sEncryption">加密方式</label>
+            <select class="select" id="sEncryption"><option value="dtls">dtls</option><option value="sdes">sdes</option><option value="none">none</option></select>
+          </div>
+          <div class="field form-grid--1 field--full">
+            <label class="field__label" for="sSipPwd">SIP 账号密码（sippassWord）</label>
+            <div class="input-group input-group--pw">
+              <input class="input" id="sSipPwd" type="password" autocomplete="off" spellcheck="false" placeholder="SIP 账号使用 IMEI">
+              <button type="button" class="input-group__toggle" id="sSipPwdToggle" aria-label="显示密码" aria-pressed="false" title="显示密码"></button>
+            </div>
+            <span class="field__hint">SIP 账号固定为设备 IMEI，此处仅下发对应密码。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8.5a15 15 0 0 1 19 0"/><path d="M6 12.2a9.5 9.5 0 0 1 12 0"/><path d="M9.5 15.8a4.5 4.5 0 0 1 5 0"/><path d="M12 19.5h.01"/></svg>
+          网络与 WiFi
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label class="switch"><input type="checkbox" id="sWlan"><span class="switch__track"></span><span class="switch__label">启用 WLAN（wlanStatus）</span></label>
+          </div>
+          <div class="field">
+            <label class="field__label" for="sWfc">WiFi Calling（wlanCallingStatus）</label>
+            <select class="select" id="sWfc"><option value="ON">ON 开启</option><option value="OFF">OFF 关闭</option></select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="sSsid">WiFi 名称（wlanName）</label>
+            <input class="input" id="sSsid" placeholder="已连接 WLAN SSID">
+          </div>
+          <div class="field">
+            <label class="field__label" for="sSsidPwd">WiFi 密码（wlanPassword）</label>
+            <input class="input" id="sSsidPwd" type="password" placeholder="WPA2 密码">
+          </div>
+          <div class="field">
+            <label class="switch"><input type="checkbox" id="sOtg"><span class="switch__track"></span><span class="switch__label">OTG 网络（otgStatus）</span></label>
+          </div>
+          <div class="field">
+            <label class="switch"><input type="checkbox" id="sEcm"><span class="switch__track"></span><span class="switch__label">ECM 网络（ecmStatus）</span></label>
+          </div>
+          <div class="field">
+            <label class="switch"><input type="checkbox" id="sAirplane"><span class="switch__track"></span><span class="switch__label">飞行模式（airplaneMode）</span></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.5"/><path d="M8 8a5.7 5.7 0 0 0 0 8M16 16a5.7 5.7 0 0 0 0-8"/><path d="M5 5a10 10 0 0 0 0 14M19 19a10 10 0 0 0 0-14"/></svg>
+          热点与业务开关
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label class="field__label" for="sHotspotName">热点名称（hotspotName）</label>
+            <input class="input" id="sHotspotName" placeholder="留空 = 关闭热点">
+          </div>
+          <div class="field">
+            <label class="field__label" for="sHotspotPwd">热点密码（hotspotPassword）</label>
+            <input class="input" id="sHotspotPwd" type="password" placeholder="建议不少于 8 位">
+          </div>
+          <div class="field">
+            <label class="field__label" for="sSmsCryption">短信加密（smsCryptionStatus）</label>
+            <select class="select" id="sSmsCryption"><option value="ON">ON 开启加密</option><option value="OFF">OFF 关闭加密</option></select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="sLogStatus">日志上报（logStatus）</label>
+            <select class="select" id="sLogStatus"><option value="ON">ON 自动上报</option><option value="OFF">OFF 关闭上报</option></select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="modal__foot">
+      <span class="u-fs-xs muted">保存只写入云端；保存并下发会立即推送并重启 Linphone。</span>
+      <span class="modal__foot-spacer"></span>
+      <button class="btn" data-close>取消</button>
+      <button class="btn" id="setSave" type="button">保存</button>
+      <button class="btn btn--primary" id="setSaveDispatch" type="button">保存并下发</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ══════════════════ MODAL : confirm ══════════════════ -->
+<div class="modal-scrim" id="modalConfirm">
+  <div class="ufi-dialog" style="width:min(520px,100%)" role="alertdialog" aria-modal="true">
+    <header class="modal__head">
+      <div>
+        <h3 class="modal__title" id="confirmTitle">确认操作</h3>
+        <p class="modal__desc">该操作不可撤销，请确认目标范围。</p>
+      </div>
+      <button class="modal__close" data-close aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+    <div class="modal__body">
+      <div class="badge badge--err" style="height:auto;padding:6px 10px;margin-bottom:12px">危险操作</div>
+      <div id="confirmBody" class="u-fs-sm"></div>
+    </div>
+    <footer class="modal__foot">
+      <span class="modal__foot-spacer"></span>
+      <button class="btn" data-close>取消</button>
+      <button class="btn btn--danger" id="confirmOk">确认</button>
+    </footer>
+  </div>
+</div>
+
+<!-- toasts -->
+<div class="toasts" id="toasts" aria-live="polite"></div>

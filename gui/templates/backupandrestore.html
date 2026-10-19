@@ -1,6 +1,6 @@
 {% extends 'fullwidth_layout.html' %}
 
-{% block title %}Backup and Restore{% endblock %}
+{% block title %}{{ _('Backup and Restore') }}{% endblock %}
 
 {% block custom_css %}
 {% endblock %}
@@ -22,10 +22,10 @@
       <div id="endpoint-nav" class="navbar"> <!-- begin nav tabs -->
         <ul class="nav nav-tabs">
           <li role="presentation" class="nav-item auth-tab">
-            <a class="nav-link active" href="#backup" name="backup-toggle" data-bs-toggle="tab" aria-selected="true">Backup</a>
+            <a class="nav-link active" href="#backup" name="backup-toggle" data-bs-toggle="tab" aria-selected="true">{{ _('Backup') }}</a>
           </li>
           <li role="presentation" class="nav-item">
-            <a class="nav-link" href="#restore" name="restore-toggle" data-bs-toggle="tab" aria-selected="false">Restore</a>
+            <a class="nav-link" href="#restore" name="restore-toggle" data-bs-toggle="tab" aria-selected="false">{{ _('Restore') }}</a>
           </li>
         </ul>
       </div><!-- end nav tabs -->

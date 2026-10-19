@@ -1,6 +1,6 @@
 {% extends 'table_layout.html' %}
 
-{% block title %}Domains{% endblock %}
+{% block title %}{{ _('Domains') }}{% endblock %}
 
 {% block custom_css %}
 {% endblock %}
@@ -118,12 +118,7 @@
           <select class="authtype form-control" name="authtype">
             <option value="">Select Domain Type</option>
             <option value="passthru">Pass Thru to PBX</option>
-            {% if licenseValid('DSIP_MSTEAMS') == False %}(Subscription Required)
-              <option value="msteams-nosub">Microsoft Teams Direct Routing (Subscription Required)</option>
-            {% else %}
-              <option value="msteams">Microsoft Teams Direct Routing</option>
-            {% endif %}
-
+            <option value="msteams">Microsoft Teams Direct Routing</option>
             <option value="local">Local Subscriber Table</option>
             <option value="realtime">Real Time DB</option>
           </select>
@@ -183,11 +178,7 @@
           <select class="authtype form-control" name="authtype">
             <option value="">Select Domain Type</option>
             <option value="passthru">Pass Thru to PBX</option>
-            {% if licenseValid('DSIP_MSTEAMS') == False %}
-              <option value="msteams-nosub">Microsoft Teams Direct Routing (Subscription Required)</option>
-            {% else %}
-              <option value="msteams">Microsoft Teams Direct Routing</option>
-            {% endif %}
+            <option value="msteams">Microsoft Teams Direct Routing</option>
             <option value="local">Local Subscriber Table</option>
             <option value="realtime">Real Time DB</option>
           </select>

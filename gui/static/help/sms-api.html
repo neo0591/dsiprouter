@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UFI 短信接口对接说明 — dSIPRouter</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1c2430;--ink2:#5a6572;--line:#e4e8ee;--brand:#e8842c;--ok:#1e9e6a;--ok-bg:#e8f7f0;--blue:#2563eb;--blue-bg:#eaf1fd;--code:#f1f3f6;--mono:Consolas,'Cascadia Code',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:15px/1.75 -apple-system,'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--ink);padding:36px 16px}
+.page{max-width:920px;margin:0 auto}
+header.hero{background:linear-gradient(135deg,#1e2a3d,#31435f);color:#fff;border-radius:16px;padding:36px 40px;margin-bottom:22px}
+header.hero h1{font-size:26px;margin-bottom:8px}
+header.hero p{color:#b9c4d4;font-size:14.5px}
+.meta{display:flex;gap:14px;margin-top:14px;font-size:12.5px;color:#93a1b5;flex-wrap:wrap}
+.meta a{color:#ffc48a}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px 32px;margin-bottom:18px}
+h2{font-size:18px;padding-bottom:8px;border-bottom:2px solid var(--brand);margin-bottom:14px}
+h3{font-size:15px;margin:18px 0 8px}
+p,li{margin:6px 0} ul,ol{margin-left:20px}
+code{font-family:var(--mono);font-size:12.5px;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+pre{background:#22304a;color:#d7e2f0;border-radius:10px;padding:14px 18px;overflow-x:auto;font:12.5px/1.55 var(--mono);margin:10px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:#f0f3f7}
+.tip{background:var(--ok-bg);border-left:4px solid var(--ok);padding:10px 14px;border-radius:8px;margin:12px 0;font-size:13.5px}
+.info{background:var(--blue-bg);border-left:4px solid var(--blue);padding:10px 14px;border-radius:8px;margin:12px 0;font-size:13.5px}
+footer{text-align:center;color:var(--ink2);font-size:12.5px;padding:16px 0 32px}
+</style>
+</head>
+<body>
+<div class="page">
+<header class="hero">
+  <h1>UFI 短信接口对接说明</h1>
+  <p>UTF-8 · HTTP REST POST · ts + SHA-256 签名。发送、上行推送、状态推送与短信密文解密均按本说明实现。</p>
+  <div class="meta">
+    <span>发送：<code style="color:#ffc48a;border:0;background:transparent">/ufi-app/api/ufi/sendSms</code></span>
+    <span>管理：<a href="/ufi-sms#openapi">短信中心 → 开放 API</a></span>
+    <span>联调：<a href="/ufi-sms-sandbox">模拟对接页</a> · <a href="/static/postman/UFI_SMS_OpenAPI.postman_collection.json">Postman</a></span>
+    <span><a href="/help">返回帮助中心</a></span>
+  </div>
+</header>
+
+<section>
+  <h2>1. 概述</h2>
+  <p>接口编码 UTF-8，请求方式 HTTP REST POST。每个接口需传递 <code>ts</code>、<code>sign</code> 做权限校验。</p>
+  <ul>
+    <li><code>ts</code>：调用时刻 unix 时间戳（毫秒）。服务器校验前后 5 分钟内合法，否则返回签名过期。</li>
+    <li><code>sign</code>：按业务参数 + ts 计算的 SHA-256 签名。</li>
+  </ul>
+</section>
+
+<section>
+  <h2>2. 鉴权与签名</h2>
+  <p>密钥在管理台「开放 API」配置（也可按运营商覆盖）：</p>
+  <table>
+    <tr><th>密钥</th><th>用途</th><th>默认值（可改）</th></tr>
+    <tr><td>api_key</td><td>标识调用方（可选放 Header / 体）</td><td><code>097365176B381B00C4F3079A0D11E303</code></td></tr>
+    <tr><td>secret_key</td><td>计算 / 校验 sign</td><td>默认同 api_key（可单独设置）</td></tr>
+    <tr><td>sms_key</td><td>推送 smsBody XOR 加解密</td><td><code>902C4397DE9AD9ECA8F7A736FDAFA13D</code></td></tr>
+  </table>
+  <h3>Sign 生成</h3>
+  <ol>
+    <li>去掉 <code>sign</code> 字段后，按 JSON key 的 ASCII 升序拼接：<code>k1=v1&amp;k2=v2&amp;...</code></li>
+    <li>末尾追加 <code>&amp;secret_key=xxxxx</code></li>
+    <li>对整串做 SHA-256，得到小写 hex 作为 <code>sign</code></li>
+  </ol>
+<pre># 示例（伪代码）
+agentType=LC-UFI-C&amp;...&amp;ts=1733827361936&amp;wlanPassword=mysecurepassword&amp;secret_key=123456
+→ SHA-256 → sign</pre>
+  <div class="tip">对齐 hutool <code>SignUtil.signParams(SHA256, map, "&amp;", "=", true, "&amp;secret_key=", secretKey)</code>。</div>
+</section>
+
+<section>
+  <h2>3. 状态码</h2>
+  <table>
+    <tr><th>code</th><th>说明</th></tr>
+    <tr><td>200</td><td>成功</td></tr>
+    <tr><td>400</td><td>请求参数错误或无效</td></tr>
+    <tr><td>401</td><td>签名过期或无效</td></tr>
+    <tr><td>500</td><td>系统错误</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>4. 发送短信</h2>
+  <p><code>POST /ufi-app/api/ufi/sendSms</code>（兼容 <code>/api/v1/sms/sendSms</code>、<code>/api/ufi/sendSms</code>）</p>
+  <table>
+    <tr><th>字段</th><th>必填</th><th>说明</th></tr>
+    <tr><td>requestId</td><td>是</td><td>请求唯一标识</td></tr>
+    <tr><td>ts</td><td>是</td><td>unix 毫秒时间戳</td></tr>
+    <tr><td>sign</td><td>是</td><td>参数签名</td></tr>
+    <tr><td>callerNumber</td><td>是</td><td>发短信号码（用于选通道）</td></tr>
+    <tr><td>calleeNumber</td><td>是</td><td>收短信号码</td></tr>
+    <tr><td>text</td><td>是</td><td>短信内容</td></tr>
+  </table>
+  <h3>请求示例</h3>
+<pre>{
+  "requestId": "6aE41dB9-f421-e1C9-67EB-e692DfF7c5Ab",
+  "ts": 1733827361936,
+  "sign": "cba50e7ec9fe06c0ac5a937f7a580d8445dd83791dd95ab233f19744cbedcfda",
+  "callerNumber": "13625000004",
+  "calleeNumber": "15159900003",
+  "text": "测试短信"
+}</pre>
+  <h3>返回示例</h3>
+<pre>{
+  "requestId": "6aE41dB9-f421-e1C9-67EB-e692DfF7c5Ab",
+  "ts": 1733827361936,
+  "code": 200,
+  "message": "发送成功"
+}</pre>
+</section>
+
+<section>
+  <h2>5. 收短信推送（MO）</h2>
+  <p>平台主动 <code>POST</code> 到运营商配置的「客户短信推送地址」。</p>
+  <table>
+    <tr><th>字段</th><th>说明</th></tr>
+    <tr><td>requestId</td><td>本次上报唯一标识</td></tr>
+    <tr><td>smsId</td><td>短信唯一标识</td></tr>
+    <tr><td>smsType</td><td><code>inbox</code>=收</td></tr>
+    <tr><td>smsBody</td><td>密文，需用 sms_key 解密</td></tr>
+    <tr><td>smsTel / callerNumber</td><td>对方号码</td></tr>
+    <tr><td>calleeNumber</td><td>本机号码</td></tr>
+    <tr><td>smsTimestamp</td><td>短信时间（毫秒）</td></tr>
+    <tr><td>ts / sign</td><td>鉴权</td></tr>
+  </table>
+<pre>{
+  "requestId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "smsId": "10000899101",
+  "smsType": "inbox",
+  "smsBody": "1KKw3ZCb1KKk",
+  "smsTel": "18909101001",
+  "smsTimestamp": 1765280069127,
+  "callerNumber": "18909101001",
+  "calleeNumber": "13625000004",
+  "failResult": "success",
+  "ts": 1733827361936,
+  "sign": "..."
+}</pre>
+  <p>客户侧应返回：</p>
+<pre>{ "smsId": "10000899101", "code": 200, "comment": "success" }</pre>
+</section>
+
+<section>
+  <h2>6. 短信状态推送</h2>
+  <p>下行发送完成后，平台 <code>POST</code> 到「短信状态推送地址」。</p>
+  <table>
+    <tr><th>字段</th><th>说明</th></tr>
+    <tr><td>smsId</td><td>短信标识（优先 requestId / ext_id）</td></tr>
+    <tr><td>smsType</td><td><code>outbox</code>=发件</td></tr>
+    <tr><td>smsStatus</td><td><code>0</code>=成功，<code>1</code>=失败</td></tr>
+    <tr><td>failResult</td><td>失败原因；成功通常为空</td></tr>
+    <tr><td>smsBody</td><td>加密正文</td></tr>
+    <tr><td>callerNumber / calleeNumber</td><td>发/收号码</td></tr>
+    <tr><td>ts / sign</td><td>鉴权</td></tr>
+  </table>
+<pre>{
+  "requestId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "ts": 1753700000123,
+  "smsId": "sms-20260728-0001",
+  "smsType": "outbox",
+  "failResult": "",
+  "smsBody": "cba50e7ec9fe06c0a",
+  "smsStatus": "0",
+  "callerNumber": "+8613800138000",
+  "calleeNumber": "+84936157034",
+  "sign": "..."
+}</pre>
+</section>
+
+<section>
+  <h2>7. 短信内容解密</h2>
+  <p><code>smsBody</code> 为 Base64(XOR(UTF-8 bytes, sms_key))。解密：Base64 → XOR → UTF-8。对齐 <code>XorCipherUtil.xorCrypt(text, false, smsKey)</code>。</p>
+  <p>默认 <code>sms_key</code>：<code>902C4397DE9AD9ECA8F7A736FDAFA13D</code></p>
+</section>
+
+<section>
+  <h2>8. 兼容接口（Bearer）</h2>
+  <p>管理台内部 / 旧对接仍可用 <code>Authorization: Bearer &lt;api_key&gt;</code>：</p>
+  <table>
+    <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+    <tr><td>POST</td><td>/api/v1/sms/send</td><td>单发</td></tr>
+    <tr><td>POST</td><td>/api/v1/sms/batch</td><td>批量任务</td></tr>
+    <tr><td>GET</td><td>/api/v1/sms/message/{id}</td><td>查询</td></tr>
+    <tr><td>GET</td><td>/api/v1/sms/health</td><td>健康检查</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>9. 配置入口</h2>
+  <ul>
+    <li><a href="/ufi-sms#openapi">开放 API</a>：维护 api_key / secret_key / sms_key</li>
+    <li><a href="/ufi-sms#channels">通道与频控</a>：按运营商配置 MO / 状态推送 URL 与密钥覆盖</li>
+  </ul>
+  <div class="info">密钥与推送地址修改后即时生效；此前因未配置而跳过的推送会自动重试（近 2 天）。</div>
+</section>
+
+<footer>UFI SMS Gateway · dSIPRouter · <a href="/help">帮助中心</a></footer>
+</div>
+</body>
+</html>

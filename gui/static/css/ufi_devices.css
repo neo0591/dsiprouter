@@ -1,0 +1,28 @@
+.ufi-config-panel {
+  padding: 0 16px 12px;
+}
+
+.ufi-config-form .form-row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: -8px;
+  margin-right: -8px;
+}
+
+.ufi-config-form .form-group {
+  padding: 0 8px;
+  margin-bottom: 12px;
+}
+
+.ufi-config-save {
+  display: flex;
+  align-items: flex-end;
+}
+
+.ufi-status-json {
+  max-height: 420px;
+  overflow: auto;
+  background: #f7f7f7;
+  padding: 12px;
+  font-size: 12px;
+}

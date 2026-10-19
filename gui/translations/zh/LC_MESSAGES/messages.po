@@ -1,0 +1,753 @@
+# Chinese (Simplified) translations for dSIPRouter.
+# Copyright (C) 2026 dSIPRouter
+# This file is distributed under the same license as the dSIPRouter project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: dSIPRouter 0.792\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-29 12:00+0800\n"
+"PO-Revision-Date: 2026-03-29 12:00+0800\n"
+"Last-Translator: \n"
+"Language-Team: Chinese\n"
+"Language: zh\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- Navigation / Layout ---
+msgid "Reload"
+msgstr "重载"
+
+msgid "Reload Kamailio"
+msgstr "重载 Kamailio"
+
+msgid "Reload dSIPRouter"
+msgstr "重载 dSIPRouter"
+
+msgid "Logout"
+msgstr "退出登录"
+
+msgid "Toggle sidebar"
+msgstr "切换侧边栏"
+
+msgid "Dashboard"
+msgstr "仪表盘"
+
+msgid "Carrier Groups"
+msgstr "运营商组"
+
+msgid "Endpoint Groups"
+msgstr "终端组"
+
+msgid "Domains"
+msgstr "域名"
+
+msgid "Inbound Routes"
+msgstr "入站路由"
+
+msgid "Outbound Routes"
+msgstr "出站路由"
+
+msgid "Call Detail Records"
+msgstr "通话详单"
+
+msgid "System Settings"
+msgstr "系统设置"
+
+msgid "Global Settings"
+msgstr "全局设置"
+
+msgid "Users"
+msgstr "用户"
+
+msgid "Backup and Restore"
+msgstr "备份与恢复"
+
+msgid "Certificates"
+msgstr "证书"
+
+msgid "Teleblock"
+msgstr "Teleblock"
+
+msgid "TransNexus"
+msgstr "TransNexus"
+
+msgid "STIR/SHAKEN"
+msgstr "STIR/SHAKEN"
+
+msgid "License Manager"
+msgstr "许可证管理"
+
+msgid "Upgrade"
+msgstr "升级"
+
+msgid "Language"
+msgstr "语言"
+
+msgid "Voice AI Agents"
+msgstr "语音 AI 座席"
+
+msgid "Numbers"
+msgstr "号码"
+
+# --- Login ---
+msgid "Login"
+msgstr "登录"
+
+msgid "username or email"
+msgstr "用户名或邮箱"
+
+msgid "password"
+msgstr "密码"
+
+msgid "Username"
+msgstr "用户名"
+
+msgid "Password"
+msgstr "密码"
+
+msgid "Built in Detroit | Version %(version)s"
+msgstr "Built in Detroit | 版本 %(version)s"
+
+msgid "Wrong Username or Password"
+msgstr "用户名或密码错误"
+
+msgid "You do not have permission to access this page"
+msgstr "您没有权限访问此页面"
+
+# --- Dashboard ---
+msgid "Kamailio Reload: %(status)s"
+msgstr "Kamailio 重载：%(status)s"
+
+msgid "Active SIP Calls"
+msgstr "活跃 SIP 呼叫"
+
+msgid "Currently Active"
+msgstr "当前活跃"
+
+msgid "Queued SIP Messages"
+msgstr "排队 SIP 消息"
+
+msgid "In Queue"
+msgstr "队列中"
+
+msgid "Calls Per Second"
+msgstr "每秒呼叫数"
+
+msgid "Registration Failures"
+msgstr "注册失败"
+
+msgid "Reg Failures"
+msgstr "注册失败"
+
+msgid "Endpoint Group Messages(Last 4 Hours)"
+msgstr "终端组消息（近 4 小时）"
+
+msgid "Endpoint Group Messages"
+msgstr "终端组消息"
+
+msgid "Carrier Group Messages(Last 4 Hours)"
+msgstr "运营商组消息（近 4 小时）"
+
+msgid "Carrier Group Messages"
+msgstr "运营商组消息"
+
+msgid "System Status"
+msgstr "系统状态"
+
+msgid "Top Endpoints Groups"
+msgstr "热门终端组"
+
+msgid "Alerts"
+msgstr "告警"
+
+# --- Page titles / headings ---
+msgid "Settings"
+msgstr "设置"
+
+msgid "MSteams Configuration"
+msgstr "Microsoft Teams 配置"
+
+msgid "STIR/SHAKEN Configuration"
+msgstr "STIR/SHAKEN 配置"
+
+msgid "Teleblock Configuration"
+msgstr "Teleblock 配置"
+
+msgid "TransNexus Configuration"
+msgstr "TransNexus 配置"
+
+msgid "Teleblock Settings"
+msgstr "Teleblock 设置"
+
+msgid "TransNexus Settings"
+msgstr "TransNexus 设置"
+
+msgid "STIR/SHAKEN Settings"
+msgstr "STIR/SHAKEN 设置"
+
+msgid "dSIPRouter Upgrade"
+msgstr "dSIPRouter 升级"
+
+msgid "License Required"
+msgstr "需要许可证"
+
+msgid "Error Page"
+msgstr "错误页"
+
+msgid "Backup"
+msgstr "备份"
+
+msgid "Restore"
+msgstr "恢复"
+
+# --- Common actions ---
+msgid "Add"
+msgstr "添加"
+
+msgid "Edit"
+msgstr "编辑"
+
+msgid "Delete"
+msgstr "删除"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Import"
+msgstr "导入"
+
+msgid "Export"
+msgstr "导出"
+
+msgid "Search"
+msgstr "搜索"
+
+msgid "Submit"
+msgstr "提交"
+
+msgid "Close"
+msgstr "关闭"
+
+msgid "Yes"
+msgstr "是"
+
+msgid "No"
+msgstr "否"
+
+msgid "Enabled"
+msgstr "启用"
+
+msgid "Disabled"
+msgstr "禁用"
+
+msgid "Name"
+msgstr "名称"
+
+msgid "Description"
+msgstr "描述"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "Actions"
+msgstr "操作"
+
+msgid "Auth"
+msgstr "认证"
+
+msgid "Endpoints"
+msgstr "终端"
+
+msgid "Call Settings"
+msgstr "呼叫设置"
+
+msgid "Notifications"
+msgstr "通知"
+
+msgid "CDR"
+msgstr "话单"
+
+msgid "FusionPBX"
+msgstr "FusionPBX"
+
+msgid "Config"
+msgstr "配置"
+
+msgid "Carriers"
+msgstr "运营商"
+
+msgid "All Calls"
+msgstr "全部通话"
+
+msgid "Filter Calls"
+msgstr "筛选通话"
+
+msgid "Billable Calls"
+msgstr "计费通话"
+
+msgid "CDR ID"
+msgstr "话单 ID"
+
+msgid "Call Start"
+msgstr "开始时间"
+
+msgid "Call Duration"
+msgstr "通话时长"
+
+msgid "Call Direction"
+msgstr "呼叫方向"
+
+msgid "Source Gateway Group"
+msgstr "源网关组"
+
+msgid "Destination Gateway Group"
+msgstr "目的网关组"
+
+msgid "Source Username"
+msgstr "主叫号码"
+
+msgid "Destination Username"
+msgstr "被叫号码"
+
+msgid "Source Address"
+msgstr "源地址"
+
+msgid "Destination Address"
+msgstr "目的地址"
+
+msgid "Call ID"
+msgstr "呼叫 ID"
+
+msgid "Original Caller"
+msgstr "原始主叫"
+
+msgid "Original Callee"
+msgstr "原始被叫"
+
+msgid "Hangup Reason"
+msgstr "挂机原因"
+
+# --- Carrier Groups ---
+msgid "List of Carrier Groups"
+msgstr "运营商组列表"
+
+msgid "Edit Your Carrier Detail"
+msgstr "编辑运营商详情"
+
+msgid "Add New Carrier Detail"
+msgstr "添加运营商详情"
+
+msgid "Edit Your Carrier Group"
+msgstr "编辑运营商组"
+
+msgid "Add New Carrier Group"
+msgstr "添加运营商组"
+
+msgid "Delete this entry"
+msgstr "删除此条目"
+
+msgid "Are you sure you want to delete this Record?"
+msgstr "确定要删除此记录吗？"
+
+msgid "Are you sure you want to delete all endpoints in this group?"
+msgstr "确定要删除该组中的所有终端吗？"
+
+msgid "Update"
+msgstr "更新"
+
+msgid "ID"
+msgstr "ID"
+
+msgid "Friendly Name(Optional)"
+msgstr "友好名称（可选）"
+
+msgid "Hostname/IP"
+msgstr "主机名/IP"
+
+msgid "# of characters to strip from RURI (outbound calls)"
+msgstr "从 RURI 剥离的字符数（出站呼叫）"
+
+msgid "The characters to prefix to a RURI (outbound calls)"
+msgstr "添加到 RURI 的前缀字符（出站呼叫）"
+
+msgid "The amount of traffic allocated to the carrier endpoint (outbound calls)"
+msgstr "分配给运营商终端的话务量（出站呼叫）"
+
+msgid "Group Name"
+msgstr "组名称"
+
+msgid "Load Balancing"
+msgstr "负载均衡"
+
+msgid "IP Auth"
+msgstr "IP 认证"
+
+msgid "Username/Password Auth"
+msgstr "用户名/密码认证"
+
+msgid "Please enter the registration username and password provided by the carrier."
+msgstr "请输入运营商提供的注册用户名和密码。"
+
+msgid "Auth Password"
+msgstr "认证密码"
+
+msgid "Registration Server or Domain"
+msgstr "注册服务器或域名"
+
+msgid "Optional Credentials"
+msgstr "可选凭证"
+
+msgid "Auth Username"
+msgstr "认证用户名"
+
+msgid "Outbound Proxy"
+msgstr "出站代理"
+
+msgid "Loading Your Carriers.."
+msgstr "正在加载运营商.."
+
+msgid "Select Carrier Plugin (Optional)"
+msgstr "选择运营商插件（可选）"
+
+msgid "Please enter the plugin credentials."
+msgstr "请输入插件凭证。"
+
+msgid "Account SID"
+msgstr "账户 SID"
+
+msgid "Account Token"
+msgstr "账户令牌"
+
+# --- Account Setup / Onboarding ---
+msgid "Account Setup"
+msgstr "开户"
+
+msgid "List of Accounts"
+msgstr "开户列表"
+
+msgid "Type"
+msgstr "类型"
+
+msgid "Management Entry"
+msgstr "管理入口"
+
+msgid "Create customer SIP trunk, DID, and related routes"
+msgstr "创建客户 SIP 中继、DID 及相关路由"
+
+msgid "PBX / endpoint authentication and hosts"
+msgstr "PBX / 终端认证与主机"
+
+msgid "Map DID numbers to endpoint groups"
+msgstr "将 DID 号码映射到终端组"
+
+msgid "Review completed and in-progress calls"
+msgstr "查看已完成和进行中的通话"
+
+msgid "This is the parent page for dSIPRouter account opening. Create a customer SIP trunk here, then continue to the detailed pages below for domains, inbound DIDs, and outbound routing."
+msgstr "这是 dSIPRouter 开户的上级页面。先在此创建客户 SIP 中继，再进入下方子页面配置域名、入站 DID 和出站路由。"
+
+msgid "Open a SIP Trunk Account"
+msgstr "开通 SIP 中继账户"
+
+msgid "Creates an Endpoint Group. Optionally maps an inbound DID to that group. Reload Kamailio after you finish."
+msgstr "将创建终端组，并可选择把入站 DID 映射到该组。完成后请重载 Kamailio。"
+
+msgid "Customer / Group Name"
+msgstr "客户 / 组名称"
+
+msgid "Friendly Name"
+msgstr "友好名称"
+
+msgid "PBX / Endpoint IP or Hostname"
+msgstr "PBX / 终端 IP 或主机名"
+
+msgid "Please enter a username and password for the PBX/Endpoint you want to register to. Specify domain if different than the default domain:"
+msgstr "请输入 PBX/终端用于注册的用户名和密码。若与默认域名不同，请指定域名："
+
+msgid "Auth Domain (optional)"
+msgstr "认证域名（可选）"
+
+msgid "Hostname/IP (optional)"
+msgstr "主机名/IP（可选）"
+
+msgid "Inbound DID (optional)"
+msgstr "入站 DID（可选）"
+
+msgid "DID (or DID pattern)"
+msgstr "DID（或 DID 模式）"
+
+msgid "Create Account"
+msgstr "创建账户"
+
+msgid "Related pages"
+msgstr "相关页面"
+
+msgid "After opening an account, manage details on these child pages."
+msgstr "开户完成后，可在以下子页面管理详细配置。"
+
+msgid "Edit auth, endpoints, FusionPBX, CDR email"
+msgstr "编辑认证、终端、FusionPBX、话单邮箱"
+
+msgid "Hosted PBX / FusionPBX / Microsoft Teams domains"
+msgstr "托管 PBX / FusionPBX / Microsoft Teams 域名"
+
+msgid "Map additional DID numbers"
+msgstr "映射更多 DID 号码"
+
+msgid "Global outbound prefixes and carrier selection"
+msgstr "全局出站前缀与运营商选择"
+
+msgid "Upstream SIP carriers used by outbound routes"
+msgstr "出站路由使用的上游 SIP 运营商"
+
+msgid "Number inventory and assignment"
+msgstr "号码库存与分配"
+
+msgid "Business Management"
+msgstr "营业管理"
+
+msgid "Phones"
+msgstr "话机"
+
+msgid "List of Phones"
+msgstr "话机列表"
+
+msgid "Extension"
+msgstr "分机"
+
+msgid "DID Count"
+msgstr "DID 数量"
+
+msgid "DID List"
+msgstr "DID 列表"
+
+msgid "Add Phone"
+msgstr "添加话机"
+
+msgid "Phone 1002"
+msgstr "话机 1002"
+
+msgid "Bind UFI SIM numbers onto a phone DID list (comma-separated). Outbound from the extension uses these DIDs as caller ID; inbound to a SIM rings this phone via the selected carrier group (typically VOS3000)."
+msgstr "把 UFI 的 SIM 号追加到话机 DID 列表（逗号分隔）。分机打外线用这些 DID 作主叫；呼叫 SIM 号经所选运营商组（通常为 VOS3000）振铃该话机。"
+
+msgid "Append UFI SIMs"
+msgstr "追加 UFI SIM"
+
+msgid "Paste SIM numbers, one per line or comma-separated"
+msgstr "粘贴 SIM 号，每行一个或逗号分隔"
+
+msgid "Append SIMs"
+msgstr "追加 SIM"
+
+msgid "IMEI"
+msgstr "IMEI"
+
+msgid "SIM"
+msgstr "SIM"
+
+msgid "Domain"
+msgstr "认证域"
+
+msgid "Open a UFI Account"
+msgstr "开通 UFI 账号"
+
+msgid "Edit UFI Account"
+msgstr "编辑 UFI 账号"
+
+msgid "Creates a SIP subscriber (username=IMEI, password=MD5(IMEI) first 16 chars) and optional SIM alias for outbound translation."
+msgstr "写入 SIP 账号（用户名=IMEI，密码=MD5(IMEI) 前 16 位），可选 SIM 别名用于呼出被叫翻译。"
+
+msgid "Import UFI Accounts"
+msgstr "导入 UFI 账号"
+
+msgid "CSV columns: IMEI, SIM. Same as ssh root@host \"python3 /root/dsip_add_ufi.py <IMEI> <SIM>\". Duplicate IMEI/SIM rows are updated in place."
+msgstr "CSV 列为 IMEI、SIM。与 ssh 一条命令开通相同。重复 IMEI/SIM 会原地更新。"
+
+msgid "CSV File"
+msgstr "CSV 文件"
+
+msgid "Download Example CSV"
+msgstr "下载示例 CSV"
+
+msgid "Or paste CSV"
+msgstr "或粘贴 CSV"
+
+msgid "Setup Wizard"
+msgstr "配置向导"
+
+msgid "UFI to VOS phone path in four steps"
+msgstr "四步完成 UFI 到 VOS 话机"
+
+msgid "Batch UFI IMEI and SIM accounts"
+msgstr "批量开通 UFI（IMEI + SIM）"
+
+msgid "Bind SIM numbers to extensions such as 1002"
+msgstr "把 SIM 绑到 1002 等分机"
+
+msgid "UFI to VOS setup"
+msgstr "UFI 对接 VOS"
+
+msgid "Follow these four steps. UFI phones register here; dSIPRouter passes From and X-VOLTE inbound, sets the outbound R-URI to the IMEI plus X-VOLTE, and sends calls to VOS3000 with IP authentication only."
+msgstr "按这四步配置即可。UFI 在此注册；呼入透传 From/X-VOLTE；呼出 R-URI 为注册名加 X-VOLTE；到 VOS3000 只用 IP 认证、不带鉴权头。"
+
+msgid "Mobile A"
+msgstr "手机 A"
+
+msgid "Cellular to UFI SIM"
+msgstr "蜂窝到 UFI SIM"
+
+msgid "UFI × N"
+msgstr "UFI × N"
+
+msgid "User = IMEI, password = MD5(IMEI)[:16]"
+msgstr "用户=IMEI，密码=MD5(IMEI) 前 16 位"
+
+msgid "IP auth, no SIP auth header"
+msgstr "IP 认证，无鉴权头"
+
+msgid "Phones 1002 / 100x"
+msgstr "话机 1002 / 100x"
+
+msgid "Billing and landing on VOS"
+msgstr "VOS 落地与计费"
+
+msgid "UFI accounts"
+msgstr "UFI 账号"
+
+msgid "Registered now"
+msgstr "当前注册"
+
+msgid "SIM aliases"
+msgstr "SIM 别名"
+
+msgid "Phones / DIDs"
+msgstr "话机 / DID"
+
+msgid "Carrier IPs"
+msgstr "落地 IP"
+
+msgid "VOS IPs"
+msgstr "VOS IP"
+
+msgid "UFI Devices"
+msgstr "UFI 设备"
+
+msgid "Power-on flow: UFI calls get-url for the platform base URL, then sip-setting. This page auto-opens the SIP account (user=IMEI, password=MD5(IMEI)[:16]) and returns the registrar."
+msgstr "上电流程：UFI 先调 get-url 拿平台 Base URL，再调 sip-setting。本页自动开 SIP 户（用户=IMEI，密码=MD5(IMEI) 前 16 位）并下发注册服务器。"
+
+msgid "API secret"
+msgstr "接口密钥"
+
+msgid "SIP host"
+msgstr "SIP 地址"
+
+msgid "SIP port"
+msgstr "SIP 端口"
+
+msgid "Transport"
+msgstr "传输"
+
+msgid "Auto provision"
+msgstr "自动开户"
+
+msgid "On"
+msgstr "开"
+
+msgid "Off"
+msgstr "关"
+
+msgid "Base URL"
+msgstr "Base URL"
+
+msgid "SN"
+msgstr "SN"
+
+msgid "Last IP"
+msgstr "最近 IP"
+
+msgid "Last seen"
+msgstr "最近上报"
+
+msgid "Provisioned"
+msgstr "已开户"
+
+msgid "SIP"
+msgstr "SIP 注册"
+
+msgid "Overview"
+msgstr "总览"
+
+msgid "VOS gateway"
+msgstr "VOS 网关"
+
+msgid "Open UFI accounts"
+msgstr "开通 UFI"
+
+msgid "Bind phone DIDs"
+msgstr "绑定话机 DID"
+
+msgid "Calls and CDRs"
+msgstr "通话与详单"
+
+msgid "Create a carrier group for VOS3000. Add the VOS IP as a gateway with IP authentication (no username/password). Typical host: 8.136.109.38."
+msgstr "为 VOS3000 建运营商组，把 VOS IP 加成网关并使用 IP 认证（不要用户名密码）。常用地址：8.136.109.38。"
+
+msgid "Open Carrier Groups"
+msgstr "打开运营商组"
+
+msgid "Batch-create SIP subscribers. Username is the IMEI; password is the first 16 hex chars of MD5(IMEI). Optional SIM becomes the dbaliases mapping for outbound."
+msgstr "批量写 SIP 开户。用户名是 IMEI；密码是 MD5(IMEI) 前 16 位十六进制。可选 SIM 写入 dbaliases，用于呼出翻译。"
+
+msgid "UFI app SIP server"
+msgstr "UFI 应用 SIP 服务器"
+
+msgid "Open UFI list"
+msgstr "打开 UFI 列表"
+
+msgid "On phones such as 1002, append each UFI SIM to the DID list and choose the VOS carrier group. Inbound to that SIM rings the phone through VOS."
+msgstr "在 1002 等话机上把每台 UFI 的 SIM 追加进 DID 列表，并选择 VOS 运营商组。呼入该 SIM 经 VOS 振铃该话机。"
+
+msgid "Open phone list"
+msgstr "打开话机列表"
+
+msgid "Reload and verify"
+msgstr "重载并验证"
+
+msgid "Reload Kamailio from the top bar. Confirm UFI REGISTER (user = IMEI), then place a test call. Inbound keeps From/X-VOLTE; outbound R-URI is the registered name plus X-VOLTE."
+msgstr "点顶栏重载 Kamailio。确认 UFI 已用 IMEI 注册，再打测试电话。呼入保留 From/X-VOLTE；呼出 R-URI 为注册名加 X-VOLTE。"
+
+msgid "Open CDRs"
+msgstr "打开通话详单"
+
+msgid "Live UFI registrations"
+msgstr "当前 UFI 注册"
+
+msgid "Registered"
+msgstr "注册状态"
+
+msgid "Received"
+msgstr "收到地址"
+
+msgid "UFI status"
+msgstr "UFI 状态"
+
+msgid "Send command"
+msgstr "下发指令"
+
+msgid "Command"
+msgstr "指令"
+
+msgid "Send"
+msgstr "发送"
+
+msgid "Signal"
+msgstr "信号"
+
+msgid "Network"
+msgstr "网络"

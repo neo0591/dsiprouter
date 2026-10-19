@@ -1,0 +1,23 @@
+{% set current = setup_step|default(0) %}
+<div class="setup-steps">
+  <a class="setup-step{% if current == 0 %} is-current{% endif %}" href="/setup">
+    <span class="setup-step-num">0</span>
+    <span class="setup-step-label">{{ _('Overview') }}</span>
+  </a>
+  <a class="setup-step{% if current == 1 %} is-current{% endif %}" href="/carriergroups">
+    <span class="setup-step-num">1</span>
+    <span class="setup-step-label">{{ _('VOS gateway') }}</span>
+  </a>
+  <a class="setup-step{% if current == 2 %} is-current{% endif %}" href="/onboarding">
+    <span class="setup-step-num">2</span>
+    <span class="setup-step-label">{{ _('Open UFI accounts') }}</span>
+  </a>
+  <a class="setup-step{% if current == 3 %} is-current{% endif %}" href="/phones">
+    <span class="setup-step-num">3</span>
+    <span class="setup-step-label">{{ _('Bind phone DIDs') }}</span>
+  </a>
+  <a class="setup-step{% if current == 4 %} is-current{% endif %}" href="/cdrs">
+    <span class="setup-step-num">4</span>
+    <span class="setup-step-label">{{ _('Calls and CDRs') }}</span>
+  </a>
+</div>

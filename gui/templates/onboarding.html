@@ -1,0 +1,158 @@
+{% extends 'table_layout.html' %}
+
+{% block title %}{{ _('Account Setup') }}{% endblock %}
+
+{% block custom_css %}
+  {{ link_tag('onboarding') }}
+{% endblock %}
+
+{% block table_headers %}
+  <div>
+    <h3>{{ _('List of Accounts') }}</h3>
+  </div>
+
+  <div class="tableAddButton">
+    <button id="open-AccountAdd" class="btn btn-success btn-md" data-title="{{ _('Add') }}"
+            data-bs-toggle="modal" data-bs-target="#add">
+      {{ _('Add') }}
+    </button>
+    <button id="open-AccountImport" class="btn btn-success btn-md" data-title="{{ _('Import') }}"
+            data-bs-toggle="modal" data-bs-target="#import">
+      {{ _('Import') }}
+    </button>
+  </div>
+{% endblock %}
+
+{% block table %}
+  <table id="accounts" class="table table-striped table-centered" style="width: 100%;">
+    <thead>
+    <tr>
+      <th data-field="id">{{ _('ID') }}</th>
+      <th data-field="imei">{{ _('IMEI') }}</th>
+      <th data-field="sims">{{ _('SIM') }}</th>
+      <th data-field="domain">{{ _('Domain') }}</th>
+      <th data-field="online">{{ _('Registered') }}</th>
+      <th></th>
+      <th></th>
+    </tr>
+    </thead>
+  </table>
+{% endblock %}
+
+{% block add_modal %}
+  <div class="modal-header">
+    <button type="button" class="close" data-bs-dismiss="modal" aria-hidden="true">
+      <i class="ti ti-x" aria-hidden="true"></i>
+    </button>
+    <h4 class="modal-title custom_align">{{ _('Open a UFI Account') }}</h4>
+  </div>
+
+  <div class="modal-body">
+    <p class="text-muted">{{ _('Creates a SIP subscriber (username=IMEI, password=MD5(IMEI) first 16 chars) and optional SIM alias for outbound translation.') }}</p>
+    <form id="onboarding-form" autocomplete="off">
+      <div class="form-group">
+        <label for="acct_imei">{{ _('IMEI') }}</label>
+        <input id="acct_imei" class="form-control" type="text" name="imei" required
+               placeholder="{{ _('IMEI') }}">
+      </div>
+      <div class="form-group">
+        <label for="acct_sim">{{ _('SIM') }}</label>
+        <input id="acct_sim" class="form-control" type="text" name="sim"
+               placeholder="{{ _('SIM') }}">
+      </div>
+      <div id="onboarding-result" class="onboarding-result d-none"></div>
+      <div class="modal-footer">
+        <button type="submit" id="onboarding-submit" class="btn btn-success btn-lg" style="width: 100%;">
+          <i class="ti ti-circle-check"></i> {{ _('Create Account') }}
+        </button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+
+{% block edit_modal %}
+  <div class="modal-header">
+    <button type="button" class="close" data-bs-dismiss="modal" aria-hidden="true">
+      <i class="ti ti-x" aria-hidden="true"></i>
+    </button>
+    <h4 class="modal-title custom_align">{{ _('Edit UFI Account') }}</h4>
+  </div>
+  <div class="modal-body">
+    <form id="onboarding-edit-form" autocomplete="off">
+      <input type="hidden" id="edit_id">
+      <div class="form-group">
+        <label for="edit_imei">{{ _('IMEI') }}</label>
+        <input id="edit_imei" class="form-control" type="text" name="imei" required>
+      </div>
+      <div class="form-group">
+        <label for="edit_sim">{{ _('SIM') }}</label>
+        <input id="edit_sim" class="form-control" type="text" name="sim"
+               placeholder="{{ _('SIM') }}">
+      </div>
+      <div id="onboarding-edit-result" class="onboarding-result d-none"></div>
+      <div class="modal-footer">
+        <button type="submit" id="onboarding-edit-submit" class="btn btn-warning btn-lg" style="width: 100%;">
+          <i class="ti ti-circle-check"></i> {{ _('Update') }}
+        </button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+
+{% block delete_modal %}
+  <div class="modal-header">
+    <button type="button" class="close" data-bs-dismiss="modal" aria-hidden="true">
+      <i class="ti ti-x" aria-hidden="true"></i>
+    </button>
+    <h4 class="modal-title custom_align">{{ _('Delete this entry') }}</h4>
+  </div>
+  <div class="modal-body">
+    <input type="hidden" id="delete_id">
+    <div class="alert alert-danger">
+      <i class="ti ti-alert-triangle"></i>
+      {{ _('Are you sure you want to delete this Record?') }}
+      <div><strong id="delete_label"></strong></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="onboarding-delete-confirm" class="btn btn-success">
+        <i class="ti ti-circle-check"></i> {{ _('Yes') }}
+      </button>
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+        <i class="ti ti-x"></i> {{ _('No') }}
+      </button>
+    </div>
+  </div>
+{% endblock %}
+
+{% block import_modal %}
+  <div class="modal-header">
+    <button type="button" class="close" data-bs-dismiss="modal" aria-hidden="true">
+      <i class="ti ti-x" aria-hidden="true"></i>
+    </button>
+    <h4 class="modal-title custom_align">{{ _('Import UFI Accounts') }}</h4>
+  </div>
+
+  <div class="modal-body">
+    <p class="text-muted">{{ _('CSV columns: IMEI, SIM. Same as ssh root@host "python3 /root/dsip_add_ufi.py <IMEI> <SIM>". Duplicate IMEI/SIM rows are updated in place.') }}</p>
+    <form id="onboarding-import-form" autocomplete="off">
+      <div class="form-group">
+        <label for="importFile">{{ _('CSV File') }} (<a href="/static/template/ufi_example.csv" target="_blank">{{ _('Download Example CSV') }}</a>)</label>
+        <input type="file" name="file" class="form-control-file" id="importFile" accept=".csv,text/csv,text/plain">
+      </div>
+      <div class="form-group">
+        <label for="importText">{{ _('Or paste CSV') }}</label>
+        <textarea id="importText" class="form-control" rows="8" placeholder="imei,sim"></textarea>
+      </div>
+      <div id="onboarding-import-result" class="onboarding-result d-none"></div>
+      <div class="modal-footer">
+        <button type="submit" id="onboarding-import-submit" class="btn btn-success btn-lg" style="width: 100%;">
+          <i class="ti ti-upload"></i> {{ _('Import') }}
+        </button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+
+{% block custom_js %}
+  {{ script_tag('onboarding') }}
+{% endblock %}

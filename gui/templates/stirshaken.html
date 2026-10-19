@@ -1,6 +1,6 @@
 {% extends 'fullwidth_layout.html' %}
 
-{% block title %}STIR/SHAKEN Configuration{% endblock %}
+{% block title %}{{ _('STIR/SHAKEN Configuration') }}{% endblock %}
 
 {% block custom_css %}
 {% endblock %}
@@ -10,7 +10,7 @@
     <form action="/stirshaken" method="POST" role="form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <div class="saveTeleblock">
-        <h4>STIR/SHAKEN Settings</h4>
+        <h4>{{ _('STIR/SHAKEN Settings') }}</h4>
         <button name='save' id='save' class='btn btn-success btn-md' data-title="Add" data-bs-toggle="modal"
                 data-bs-target="#add">Save
         </button>

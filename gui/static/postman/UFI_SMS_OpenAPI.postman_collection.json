@@ -1,0 +1,253 @@
+{
+  "info": {
+    "_postman_id": "a7c3e9f1-ufi-sms-openapi-2026",
+    "name": "UFI SMS OpenAPI",
+    "description": "UFI 短信开放接口联调集合。\n\n鉴权：\n1) 文档协议：ts(毫秒) + SHA-256(sign) + secret_key\n2) 兼容：Authorization: Bearer <api_key>\n\nSign 算法：去掉 sign 后 key ASCII 升序拼接 k=v&...&secret_key=SK → SHA-256 小写 hex。\n\n管理台：/ufi-sms#openapi\n模拟对接页：/ufi-sms-sandbox\n帮助：/help/sms-api",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://ufi.mineo.top" },
+    { "key": "apiKey", "value": "097365176B381B00C4F3079A0D11E303" },
+    { "key": "secretKey", "value": "097365176B381B00C4F3079A0D11E303" },
+    { "key": "smsKey", "value": "902C4397DE9AD9ECA8F7A736FDAFA13D" },
+    { "key": "callerNumber", "value": "13625000004" },
+    { "key": "calleeNumber", "value": "15159900003" },
+    { "key": "text", "value": "UFI Postman 联调测试短信" },
+    { "key": "keyId", "value": "2" }
+  ],
+  "item": [
+    {
+      "name": "1. 文档协议 sendSms (ts+sign)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const CryptoJS = require('crypto-js');",
+              "const requestId = pm.variables.replaceIn('{{$guid}}');",
+              "const ts = Date.now();",
+              "const body = {",
+              "  requestId: requestId,",
+              "  ts: ts,",
+              "  callerNumber: pm.collectionVariables.get('callerNumber'),",
+              "  calleeNumber: pm.collectionVariables.get('calleeNumber'),",
+              "  text: pm.collectionVariables.get('text'),",
+              "  apiKey: pm.collectionVariables.get('apiKey')",
+              "};",
+              "const secret = pm.collectionVariables.get('secretKey') || '';",
+              "const keys = Object.keys(body).filter(k => k !== 'sign').sort();",
+              "const raw = keys.map(k => k + '=' + body[k]).join('&') + '&secret_key=' + secret;",
+              "body.sign = CryptoJS.SHA256(raw).toString();",
+              "pm.collectionVariables.set('lastSignRaw', raw);",
+              "pm.collectionVariables.set('lastRequestId', requestId);",
+              "pm.collectionVariables.set('signedBody', JSON.stringify(body));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 可达', function () { pm.expect(pm.response.code).to.be.oneOf([200, 400, 401, 500]); });",
+              "let j = {};",
+              "try { j = pm.response.json(); } catch (e) {}",
+              "pm.test('响应含 requestId/code', function () {",
+              "  pm.expect(j).to.have.property('requestId');",
+              "  pm.expect(j).to.have.property('code');",
+              "});",
+              "console.log('sign raw =', pm.collectionVariables.get('lastSignRaw'));",
+              "console.log('response =', j);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{signedBody}}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/sms/sendSms",
+        "description": "对接文档 3.2。Pre-request 自动生成 requestId/ts/sign。"
+      }
+    },
+    {
+      "name": "1b. sendSms 兼容路径 /ufi-app/api/ufi/sendSms",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const CryptoJS = require('crypto-js');",
+              "const requestId = pm.variables.replaceIn('{{$guid}}');",
+              "const ts = Date.now();",
+              "const body = {",
+              "  requestId: requestId,",
+              "  ts: ts,",
+              "  callerNumber: pm.collectionVariables.get('callerNumber'),",
+              "  calleeNumber: pm.collectionVariables.get('calleeNumber'),",
+              "  text: pm.collectionVariables.get('text'),",
+              "  apiKey: pm.collectionVariables.get('apiKey')",
+              "};",
+              "const secret = pm.collectionVariables.get('secretKey') || '';",
+              "const keys = Object.keys(body).filter(k => k !== 'sign').sort();",
+              "const raw = keys.map(k => k + '=' + body[k]).join('&') + '&secret_key=' + secret;",
+              "body.sign = CryptoJS.SHA256(raw).toString();",
+              "pm.collectionVariables.set('signedBody', JSON.stringify(body));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json; charset=utf-8" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{signedBody}}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/ufi-app/api/ufi/sendSms"
+      }
+    },
+    {
+      "name": "2. Bearer 兼容单发 /api/v1/sms/send",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+          { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"{{calleeNumber}}\",\n  \"content\": \"{{text}}\",\n  \"callerNumber\": \"{{callerNumber}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/sms/send",
+        "description": "Authorization: Bearer <api_key>"
+      }
+    },
+    {
+      "name": "3. 健康检查 /api/v1/sms/health",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiKey}}" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/v1/sms/health"
+      }
+    },
+    {
+      "name": "4. 管理台 · 列出 API Key",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/v1/ufi/sms/apikeys",
+        "description": "需要管理台登录 Cookie（session）。"
+      }
+    },
+    {
+      "name": "5. 管理台 · 新建 API Key",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman联调\",\n  \"pool_id\": \"\",\n  \"note\": \"由 Postman 创建\",\n  \"sms_key\": \"{{smsKey}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/ufi/sms/apikeys",
+        "description": "api_key 省略则服务端自动生成。需要登录会话。"
+      }
+    },
+    {
+      "name": "6. 管理台 · 删除 API Key",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"del\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/ufi/sms/apikeys/{{keyId}}",
+        "description": "将集合变量 keyId 设为要删除的记录 id。"
+      }
+    },
+    {
+      "name": "7. 管理台 · 启停 API Key",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"toggle\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/ufi/sms/apikeys/{{keyId}}"
+      }
+    },
+    {
+      "name": "8. 模拟客户 · 接收上行 MO",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json; charset=utf-8" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"requestId\": \"{{$guid}}\",\n  \"smsId\": \"10000899101\",\n  \"smsType\": \"inbox\",\n  \"smsBody\": \"请用模拟页生成带 sign 的完整体\",\n  \"smsTel\": \"18909101001\",\n  \"smsTimestamp\": {{$timestamp}}000,\n  \"callerNumber\": \"18909101001\",\n  \"calleeNumber\": \"{{callerNumber}}\",\n  \"failResult\": \"success\",\n  \"ts\": {{$timestamp}}000,\n  \"sign\": \"replace-me\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/sms/sandbox/mo",
+        "description": "模拟客户「短信推送地址」。无需登录。应答 {smsId,code,comment}。建议在 /ufi-sms-sandbox 点「本机模拟推一条 MO」。"
+      }
+    },
+    {
+      "name": "9. 模拟客户 · 接收状态 Report",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json; charset=utf-8" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"requestId\": \"{{$guid}}\",\n  \"ts\": {{$timestamp}}000,\n  \"smsId\": \"sms-report-1\",\n  \"smsType\": \"outbox\",\n  \"failResult\": \"\",\n  \"smsBody\": \"replace-me\",\n  \"smsStatus\": \"0\",\n  \"callerNumber\": \"{{callerNumber}}\",\n  \"calleeNumber\": \"{{calleeNumber}}\",\n  \"sign\": \"replace-me\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/sms/sandbox/report",
+        "description": "模拟客户「短信状态推送地址」。无需登录。"
+      }
+    },
+    {
+      "name": "10. 模拟客户 · 查看收件箱",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/v1/sms/sandbox/inbox?limit=40",
+        "description": "需要登录会话。也可打开 /ufi-sms-sandbox 实时查看。"
+      }
+    }
+  ]
+}

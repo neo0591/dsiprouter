@@ -22,11 +22,6 @@ DSIP_SYSTEM_CONFIG_DIR='/etc/dsiprouter'
 }
 
 printdbg 'validating system configuration'
-if ! dsiprouter licensemanager -check tag=DSIP_CORE; then
-    printerr 'A DSIP_CORE license is required to use the auto upgrade feature'
-    echo 'Consider supporting the hard working engineers maintaining this software if you would like to use this feature'
-    exit 1
-fi
 
 printdbg 'retrieving current system settings'
 export PYTHON_CMD=${OLD_PROJECT_DIR}/venv/bin/python

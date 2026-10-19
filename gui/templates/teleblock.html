@@ -1,6 +1,6 @@
 {% extends 'fullwidth_layout.html' %}
 
-{% block title %}Teleblock Configuration{% endblock %}
+{% block title %}{{ _('Teleblock Configuration') }}{% endblock %}
 
 {% block custom_css %}
 {% endblock %}
@@ -12,7 +12,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
       <div class="saveTeleblock">
-        <h4>Teleblock Settings</h4>
+        <h4>{{ _('Teleblock Settings') }}</h4>
         <button name='save' id='save' class='btn btn-success btn-md' data-title="Add" data-bs-toggle="modal"
                 data-bs-target="#add">Save
         </button>

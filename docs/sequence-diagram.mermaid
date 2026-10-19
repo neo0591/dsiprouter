@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant U as 客户操作员
+    participant D as ufi_device.py
+    participant A as acl
+    participant DB as MySQL
+
+    U->>D: PUT /api/v1/ufi/comm/<imei>
+    D->>A: require_owned_imei(imei)
+    A->>DB: SELECT customer_id FROM dsip_ufi_device WHERE imei=:imei
+    alt 非本租户
+        A-->>D: 403
+    else 本租户
+        A-->>D: 放行
+        D->>DB: INSERT/UPDATE dsip_ufi_pool ... customer_id=:cid
+    end
+    U->>D: GET /api/v1/ufi/calls
+    D->>A: scoped_imei('c')
+    A-->>D: " AND EXISTS(SELECT 1 FROM dsip_ufi_device _d WHERE _d.imei=c.imei AND _d.customer_id=:__cid)"
+    D->>DB: SELECT ... FROM dsip_ufi_call c WHERE ... EXISTS(...)
+    DB-->>D: 仅本租户通话

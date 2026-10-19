@@ -67,12 +67,6 @@ DSIP_TRANSNEXUS_LICENSE=$(decryptConfigAttrib 'DSIP_TRANSNEXUS_LICENSE' ${DSIP_C
 DSIP_MSTEAMS_LICENSE=$(decryptConfigAttrib 'DSIP_MSTEAMS_LICENSE' ${DSIP_CONFIG_FILE} | dd if=/dev/stdin of=/dev/stdout bs=1 count=32 2>/dev/null)
 
 printdbg 'validating system system configuration'
-if [[ -z "$DSIP_CORE_LICENSE" ]]; then
-    printerr 'A DSIP_CORE license is required to use the auto upgrade feature'
-    echo 'Consider supporting the hard working engineers maintaining this software if you would like to use this feature'
-    exit 1
-fi
-
 
 printdbg 'preparing for migration'
 REINSTALL_DNSMASQ=0

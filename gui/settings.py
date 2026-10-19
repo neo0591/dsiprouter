@@ -22,8 +22,10 @@ DSIP_IPC_SOCK = '/run/dsiprouter/ipc.sock'
 DSIP_IPC_PASS = 'admin'
 
 # dsiprouter logging settings
-# syslog level and facility values based on:
-# <http://www.nightmare.com/squirl/python-ext/misc/syslog.py>
+# Values 0-7 are historical syslog priorities (3 = LOG_ERR) and are mapped
+# in sysloginit.py to a Python level. Do not pass them raw to logging.setLevel
+# (3 would mean "log everything above 3", i.e. all SQL DEBUG).
+# Python levels (>=10) are used as-is. SQLAlchemy is always WARNING.
 
 DSIP_LOG_LEVEL = 3
 DSIP_LOG_FACILITY = 18
@@ -154,6 +156,11 @@ RTPENGINE_URI = 'udp:localhost:7722'
 ################# Local-Only Settings ####################
 # settings in this section are not stored on the DB
 
+# GUI language (i18n) — supported: zh, en
+# Default locale used when the user has not chosen a language
+DSIP_DEFAULT_LOCALE = 'zh'
+DSIP_DEFAULT_TIMEZONE = 'Asia/Shanghai'
+
 # the key used by the flask session manager
 DSIP_SESSION_KEY = None
 
@@ -233,6 +240,8 @@ GIT_RELEASE_URL = 'https://api.github.com/repos/dOpensource/dsiprouter/releases'
 # AUTH_MODULES = {"ldap": {"LDAP_HOST":"ldap://ldap.dopensource.com", "USER_SEARCH_BASE":"ou=People,dc=dopensource,dc=com", "GROUP_SEARCH_BASE":"dc=dopensource,dc=com", "GROUP_MEMBER_ATTRIBUTE":"memberUid", "REQUIRED_GROUP":"support", "USER_ATTRIBUTE":"uid"}}
 AUTH_MODULES = {}
 
-VOICEAI_OPENAI_KEY = ''
-VOICEAI_AGENT_IMAGE = 'dopensource/dsiprouter-voice-agents:latest' 
+UFI_WS_BIND = '127.0.0.1'
+UFI_WS_PORT = 15001
+UFI_LOG_DIR = '/var/lib/dsiprouter/ufi_logs'
+
 ############### End Local-Only Settings ##################

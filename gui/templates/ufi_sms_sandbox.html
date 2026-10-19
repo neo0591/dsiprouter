@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>短信开放接口 · 模拟对接 — dSIPRouter</title>
+<style>
+:root{
+  --bg:#0f1419; --panel:#1a222d; --panel2:#222c3a; --line:#2d3a4c;
+  --tx:#e8eef6; --tx2:#9aabbd; --tx3:#6b7c90;
+  --accent:#e8842c; --accent2:#f0a35a; --ok:#2ecf8a; --err:#f07178; --warn:#e6c07b;
+  --mono: ui-monospace, Consolas, "Cascadia Code", monospace;
+  --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:14px/1.55 var(--sans);background:radial-gradient(1200px 600px at 10% -10%,#1c2a3d 0%,var(--bg) 45%);color:var(--tx);min-height:100vh}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 18px 48px}
+.hero{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;margin-bottom:22px}
+.hero h1{font-size:24px;letter-spacing:-.3px}
+.hero p{color:var(--tx2);margin-top:6px;max-width:620px}
+.hero .links{display:flex;gap:8px;flex-wrap:wrap}
+.btn{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--tx);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
+.btn:hover{border-color:#4a5d75}
+.btn.primary{background:linear-gradient(180deg,var(--accent2),var(--accent));border-color:#c96e1a;color:#1a1208;font-weight:600}
+.btn.ghost{background:transparent}
+.grid{display:grid;grid-template-columns:1.05fr .95fr;gap:14px}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.card-h{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
+.card-h h2{font-size:14px;font-weight:600}
+.card-h .hint{margin-left:auto;color:var(--tx3);font-size:12px}
+.card-b{padding:14px 16px}
+label{display:block;font-size:12px;color:var(--tx2);margin:0 0 6px}
+.field{margin-bottom:12px}
+.inp,textarea,select{width:100%;background:#121820;border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:9px 11px;font:13px/1.4 var(--mono)}
+textarea{min-height:88px;resize:vertical}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media (max-width:700px){.row,.row3{grid-template-columns:1fr}}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--tx2)}
+.tag.ok{color:var(--ok);border-color:rgba(46,207,138,.35);background:rgba(46,207,138,.08)}
+.tag.err{color:var(--err);border-color:rgba(240,113,120,.35);background:rgba(240,113,120,.08)}
+.tag.warn{color:var(--warn);border-color:rgba(230,192,123,.35);background:rgba(230,192,123,.08)}
+pre.log{background:#0c1016;border:1px solid var(--line);border-radius:10px;padding:12px;font:12px/1.5 var(--mono);color:#c9d6e5;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.tabs{display:flex;gap:4px;padding:8px 10px 0;border-bottom:1px solid var(--line)}
+.tab{border:0;background:transparent;color:var(--tx3);padding:8px 12px;border-radius:8px 8px 0 0;cursor:pointer;font:inherit}
+.tab.on{color:var(--tx);background:rgba(255,255,255,.04);border:1px solid var(--line);border-bottom-color:var(--panel)}
+.pane{display:none}.pane.on{display:block}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:12.5px;margin-top:8px}
+.kv b{color:var(--tx3);font-weight:500}
+.note{font-size:12.5px;color:var(--tx2);background:rgba(232,132,44,.08);border:1px solid rgba(232,132,44,.25);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.foot{margin-top:18px;color:var(--tx3);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div>
+      <h1>短信开放接口 · 模拟对接</h1>
+      <p>独立联调页（不在菜单中）。可发送短信、验签解密，并模拟客户侧接收「上行推送 / 状态报告」两个回调接口。</p>
+    </div>
+    <div class="links">
+      <a class="btn ghost" href="/help/sms-api" target="_blank">接口文档</a>
+      <a class="btn ghost" href="/ufi-sms#openapi">开放 API 管理</a>
+      <a class="btn ghost" href="/ufi-sms#channels">通道推送配置</a>
+      <a class="btn ghost" href="/static/postman/UFI_SMS_OpenAPI.postman_collection.json" download>Postman 集合</a>
+    </div>
+  </div>
+
+  <div class="note">
+    发送走真实网关会消耗通道。下方「模拟客户接收」两个 URL 填到通道里的「客户短信推送地址 / 短信状态推送地址」，平台推送会显示在本页收件箱。
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-h"><h2>密钥与通道</h2><span class="hint">localStorage 自动记住</span></div>
+      <div class="card-b">
+        <div class="field"><label>Base URL</label><input class="inp" id="baseUrl" value=""></div>
+        <div class="row">
+          <div class="field"><label>api_key</label><input class="inp" id="apiKey" value="097365176B381B00C4F3079A0D11E303"></div>
+          <div class="field"><label>secret_key</label><input class="inp" id="secretKey" value="097365176B381B00C4F3079A0D11E303"></div>
+        </div>
+        <div class="field"><label>sms_key（推送正文 XOR）</label><input class="inp" id="smsKey" value="902C4397DE9AD9ECA8F7A736FDAFA13D"></div>
+        <div class="actions">
+          <button class="btn" id="btnSave">保存到本机</button>
+          <button class="btn" id="btnReset">恢复文档默认</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab on" data-tab="send">发送短信</button>
+        <button class="tab" data-tab="bearer">Bearer 兼容</button>
+        <button class="tab" data-tab="crypto">验签 / 解密</button>
+        <button class="tab" data-tab="hooks">客户回调</button>
+      </div>
+
+      <div class="card-b pane on" id="pane-send">
+        <div class="row">
+          <div class="field"><label>callerNumber（本端 SIM）</label><input class="inp" id="caller" placeholder="选路用，可空"></div>
+          <div class="field"><label>calleeNumber（对端）</label><input class="inp" id="callee" placeholder="必填"></div>
+        </div>
+        <div class="field"><label>text</label><textarea id="text">模拟对接测试短信</textarea></div>
+        <div class="actions">
+          <button class="btn primary" id="btnSend">计算 sign 并发送</button>
+          <button class="btn" id="btnPreview">只预览请求体</button>
+        </div>
+      </div>
+
+      <div class="card-b pane" id="pane-bearer">
+        <div class="field"><label>to</label><input class="inp" id="bTo" placeholder="对端号码"></div>
+        <div class="field"><label>content</label><textarea id="bText">Bearer 兼容测试</textarea></div>
+        <div class="actions">
+          <button class="btn primary" id="btnBearer">Authorization: Bearer 发送</button>
+        </div>
+      </div>
+
+      <div class="card-b pane" id="pane-crypto">
+        <div class="field"><label>待验签 JSON（可粘贴推送体）</label><textarea id="rawJson" style="min-height:140px" placeholder='{"ts":...,"sign":"...", ...}'></textarea></div>
+        <div class="actions">
+          <button class="btn primary" id="btnVerify">校验 sign</button>
+          <button class="btn" id="btnDecrypt">解密 smsBody</button>
+          <button class="btn" id="btnSampleMo">填入模拟 MO</button>
+          <button class="btn" id="btnSampleReport">填入模拟状态报告</button>
+        </div>
+      </div>
+
+      <div class="card-b pane" id="pane-hooks">
+        <div class="field">
+          <label>客户短信推送地址（MO）· 填到通道配置</label>
+          <div class="row" style="align-items:center">
+            <input class="inp" id="moUrl" readonly>
+            <button class="btn" type="button" data-copy="moUrl">复制</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>短信状态推送地址（Report）· 填到通道配置</label>
+          <div class="row" style="align-items:center">
+            <input class="inp" id="reportUrl" readonly>
+            <button class="btn" type="button" data-copy="reportUrl">复制</button>
+          </div>
+        </div>
+        <div class="note" style="margin:0 0 12px">
+          平台会 <code>POST</code> JSON 到上述地址；本页接口无需登录，应答格式为
+          <code>{"smsId","code":200,"comment":"success"}</code>。
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="btnSelfMo">本机模拟推一条 MO</button>
+          <button class="btn" id="btnSelfReport">本机模拟推一条状态</button>
+          <button class="btn" id="btnInboxRefresh">刷新收件箱</button>
+          <button class="btn" id="btnInboxClear">清空</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <h2>请求 / 响应</h2>
+        <span class="hint" id="statusTag"><span class="tag">待命</span></span>
+      </div>
+      <div class="card-b">
+        <div class="kv">
+          <b>端点</b><span id="metaUrl">—</span>
+          <b>耗时</b><span id="metaMs">—</span>
+          <b>HTTP</b><span id="metaHttp">—</span>
+        </div>
+        <label style="margin-top:12px">签名原文</label>
+        <pre class="log" id="signRaw">—</pre>
+        <label style="margin-top:10px">请求体</label>
+        <pre class="log" id="reqBody">—</pre>
+        <label style="margin-top:10px">响应</label>
+        <pre class="log" id="respBody">—</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="card-h">
+      <h2>模拟客户 · 推送收件箱</h2>
+      <span class="hint" id="inboxHint">自动每 3s 刷新</span>
+      <div class="actions" style="margin:0 0 0 12px">
+        <span class="tag" id="inboxCount">0</span>
+      </div>
+    </div>
+    <div class="card-b" id="inboxList" style="max-height:460px;overflow:auto">
+      <div style="color:var(--tx3);padding:12px 0">尚无推送。把上方 MO / Report URL 配到「通道与频控」后，上行短信或下行状态会显示在这里。</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    路径 <code>/ufi-sms-sandbox</code> · 回调 <code>/api/v1/sms/sandbox/mo</code> · <code>/api/v1/sms/sandbox/report</code>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const LS = 'ufi.sms.sandbox.v1';
+  const DEFAULTS = {
+    apiKey: '097365176B381B00C4F3079A0D11E303',
+    secretKey: '097365176B381B00C4F3079A0D11E303',
+    smsKey: '902C4397DE9AD9ECA8F7A736FDAFA13D'
+  };
+
+  function uuid() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  async function sha256Hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function createSign(params, secretKey) {
+    const keys = Object.keys(params || {}).filter(k => k !== 'sign').sort();
+    const raw = keys.map(k => k + '=' + params[k]).join('&') + '&secret_key=' + String(secretKey || '');
+    return { raw, promise: sha256Hex(raw) };
+  }
+
+  function xorCrypt(text, encrypt, key) {
+    if (text == null || text === '' || !key) return text;
+    try {
+      if (encrypt) {
+        const bytes = new TextEncoder().encode(String(text));
+        const out = new Uint8Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ (key.charCodeAt(i % key.length) & 0xff);
+        let bin = '';
+        out.forEach(b => { bin += String.fromCharCode(b); });
+        return btoa(bin);
+      }
+      const raw = Uint8Array.from(atob(String(text)), c => c.charCodeAt(0));
+      const out = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) out[i] = raw[i] ^ (key.charCodeAt(i % key.length) & 0xff);
+      return new TextDecoder().decode(out);
+    } catch (e) {
+      return text;
+    }
+  }
+
+  function conf() {
+    return {
+      baseUrl: ($('#baseUrl').value || location.origin).replace(/\/$/, ''),
+      apiKey: $('#apiKey').value.trim(),
+      secretKey: $('#secretKey').value.trim(),
+      smsKey: $('#smsKey').value.trim()
+    };
+  }
+
+  function setStatus(kind, text) {
+    $('#statusTag').innerHTML = '<span class="tag ' + (kind || '') + '">' + text + '</span>';
+  }
+
+  function showMeta(url, ms, http) {
+    $('#metaUrl').textContent = url || '—';
+    $('#metaMs').textContent = ms != null ? (ms + ' ms') : '—';
+    $('#metaHttp').textContent = http != null ? String(http) : '—';
+  }
+
+  function load() {
+    $('#baseUrl').value = location.origin;
+    try {
+      const s = JSON.parse(localStorage.getItem(LS) || '{}');
+      if (s.apiKey) $('#apiKey').value = s.apiKey;
+      if (s.secretKey) $('#secretKey').value = s.secretKey;
+      if (s.smsKey) $('#smsKey').value = s.smsKey;
+      if (s.caller) $('#caller').value = s.caller;
+      if (s.callee) $('#callee').value = s.callee;
+    } catch (e) {}
+  }
+
+  function save() {
+    const c = conf();
+    localStorage.setItem(LS, JSON.stringify({
+      apiKey: c.apiKey, secretKey: c.secretKey, smsKey: c.smsKey,
+      caller: $('#caller').value.trim(), callee: $('#callee').value.trim()
+    }));
+    setStatus('ok', '已保存本机配置');
+  }
+
+  async function buildSendBody() {
+    const c = conf();
+    const body = {
+      requestId: uuid(),
+      ts: Date.now(),
+      callerNumber: $('#caller').value.trim(),
+      calleeNumber: $('#callee').value.trim(),
+      text: $('#text').value,
+      apiKey: c.apiKey
+    };
+    if (!body.callerNumber) delete body.callerNumber;
+    const { raw, promise } = createSign(body, c.secretKey);
+    body.sign = await promise;
+    return { body, raw, url: c.baseUrl + '/api/v1/sms/sendSms' };
+  }
+
+  async function doSend(previewOnly) {
+    try {
+      const { body, raw, url } = await buildSendBody();
+      $('#signRaw').textContent = raw;
+      $('#reqBody').textContent = JSON.stringify(body, null, 2);
+      showMeta(url, null, null);
+      if (previewOnly) {
+        setStatus('warn', '仅预览');
+        $('#respBody').textContent = '（未发送）';
+        return;
+      }
+      if (!body.calleeNumber) { setStatus('err', '缺少 calleeNumber'); return; }
+      setStatus('', '发送中…');
+      const t0 = performance.now();
+      const res = await fetch(url, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const ms = Math.round(performance.now() - t0);
+      const text = await res.text();
+      let json = text;
+      try { json = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+      showMeta(url, ms, res.status);
+      $('#respBody').textContent = json;
+      setStatus(res.ok ? 'ok' : 'err', res.ok ? '完成' : ('HTTP ' + res.status));
+      save();
+    } catch (e) {
+      setStatus('err', '失败');
+      $('#respBody').textContent = String(e && e.message || e);
+    }
+  }
+
+  async function doBearer() {
+    const c = conf();
+    const url = c.baseUrl + '/api/v1/sms/send';
+    const body = {
+      to: ($('#bTo').value || $('#callee').value).trim(),
+      content: $('#bText').value,
+      callerNumber: $('#caller').value.trim()
+    };
+    $('#signRaw').textContent = 'Authorization: Bearer ' + c.apiKey;
+    $('#reqBody').textContent = JSON.stringify(body, null, 2);
+    setStatus('', '发送中…');
+    const t0 = performance.now();
+    try {
+      const res = await fetch(url, {
+        method: 'POST', credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Authorization': 'Bearer ' + c.apiKey
+        },
+        body: JSON.stringify(body)
+      });
+      const ms = Math.round(performance.now() - t0);
+      const text = await res.text();
+      let json = text;
+      try { json = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+      showMeta(url, ms, res.status);
+      $('#respBody').textContent = json;
+      setStatus(res.ok ? 'ok' : 'err', res.ok ? '完成' : ('HTTP ' + res.status));
+    } catch (e) {
+      setStatus('err', '失败');
+      $('#respBody').textContent = String(e && e.message || e);
+    }
+  }
+
+  async function verifySign() {
+    const c = conf();
+    let obj;
+    try { obj = JSON.parse($('#rawJson').value); }
+    catch (e) { setStatus('err', 'JSON 无效'); return; }
+    const got = String(obj.sign || '').toLowerCase();
+    const { raw, promise } = createSign(obj, c.secretKey);
+    const expect = await promise;
+    $('#signRaw').textContent = raw + '\n\nexpect = ' + expect + '\ngot    = ' + got;
+    $('#reqBody').textContent = JSON.stringify(obj, null, 2);
+    $('#respBody').textContent = (got && got === expect)
+      ? '✓ 签名匹配'
+      : '✗ 签名不匹配（检查 secret_key / 字段是否被改动）';
+    setStatus(got && got === expect ? 'ok' : 'err', got && got === expect ? '验签通过' : '验签失败');
+  }
+
+  function decryptBody() {
+    const c = conf();
+    let obj;
+    try { obj = JSON.parse($('#rawJson').value); }
+    catch (e) { setStatus('err', 'JSON 无效'); return; }
+    const enc = obj.smsBody || '';
+    const plain = xorCrypt(enc, false, c.smsKey);
+    $('#respBody').textContent = 'smsBody 密文:\n' + enc + '\n\n解密结果:\n' + plain;
+    setStatus('ok', '已解密');
+  }
+
+  async function fillSample(kind) {
+    const c = conf();
+    const base = kind === 'mo' ? {
+      requestId: uuid(),
+      smsId: '10000899101',
+      smsType: 'inbox',
+      smsBody: xorCrypt('你好，这是上行短信样例', true, c.smsKey),
+      smsTel: '18909101001',
+      smsTimestamp: Date.now(),
+      callerNumber: '18909101001',
+      calleeNumber: $('#caller').value.trim() || '13625000004',
+      failResult: 'success',
+      ts: Date.now()
+    } : {
+      requestId: uuid(),
+      ts: Date.now(),
+      smsId: 'sms-sandbox-0001',
+      smsType: 'outbox',
+      failResult: '',
+      smsBody: xorCrypt($('#text').value || '下行短信样例', true, c.smsKey),
+      smsStatus: '0',
+      callerNumber: $('#caller').value.trim() || '13625000004',
+      calleeNumber: $('#callee').value.trim() || '15159900003'
+    };
+    const { promise } = createSign(base, c.secretKey);
+    base.sign = await promise;
+    $('#rawJson').value = JSON.stringify(base, null, 2);
+    setStatus('warn', kind === 'mo' ? '已填入模拟 MO' : '已填入模拟状态报告');
+  }
+
+  function refreshHookUrls() {
+    const base = conf().baseUrl;
+    $('#moUrl').value = base + '/api/v1/sms/sandbox/mo';
+    $('#reportUrl').value = base + '/api/v1/sms/sandbox/report';
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  async function loadInbox() {
+    const c = conf();
+    try {
+      const res = await fetch(c.baseUrl + '/api/v1/sms/sandbox/inbox?limit=40&_=' + Date.now(), {
+        credentials: 'same-origin', cache: 'no-store'
+      });
+      if (res.status === 401) { location.href = '/'; return; }
+      const json = await res.json().catch(() => ({}));
+      const body = (json.data && json.data[0]) || {};
+      const items = body.items || [];
+      $('#inboxCount').textContent = String(items.length);
+      const box = $('#inboxList');
+      if (!items.length) {
+        box.innerHTML = '<div style="color:var(--tx3);padding:12px 0">尚无推送。把上方 MO / Report URL 配到「通道与频控」后，上行短信或下行状态会显示在这里。</div>';
+        return;
+      }
+      box.innerHTML = items.map(it => {
+        const kind = it.kind === 'mo' ? '上行 MO' : '状态 Report';
+        const cls = it.kind === 'mo' ? 'ok' : 'warn';
+        const sign = it.sign_ok === true ? '<span class="tag ok">验签OK</span>'
+          : (it.sign_ok === false ? '<span class="tag err">验签失败</span>' : '<span class="tag">未验签</span>');
+        const plain = it.sms_plain ? ('<div style="margin-top:6px;color:var(--ok)">明文：' + esc(it.sms_plain) + '</div>') : '';
+        const peer = (it.payload && (it.payload.callerNumber || it.payload.smsTel || it.payload.calleeNumber)) || '';
+        return '<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#121820">' +
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<span class="tag ' + cls + '">' + kind + '</span>' + sign +
+          '<span style="color:var(--tx3);font-size:12px">' + esc(it.at || '') + '</span>' +
+          (peer ? '<span class="tag">' + esc(peer) + '</span>' : '') +
+          '</div>' + plain +
+          '<pre class="log" style="max-height:180px;margin-top:8px">' + esc(JSON.stringify(it.payload || {}, null, 2)) + '</pre>' +
+          '</div>';
+      }).join('');
+    } catch (e) {
+      $('#inboxHint').textContent = '刷新失败：' + (e.message || e);
+    }
+  }
+
+  async function clearInbox() {
+    if (!confirm('清空模拟客户收件箱？')) return;
+    const c = conf();
+    await fetch(c.baseUrl + '/api/v1/sms/sandbox/inbox', {
+      method: 'DELETE', credentials: 'same-origin'
+    });
+    loadInbox();
+  }
+
+  async function selfPush(kind) {
+    const c = conf();
+    const url = kind === 'mo' ? $('#moUrl').value : $('#reportUrl').value;
+    const payload = kind === 'mo' ? {
+      requestId: uuid(),
+      smsId: 'sandbox-mo-' + Date.now(),
+      smsType: 'inbox',
+      smsBody: xorCrypt('本机模拟上行：' + new Date().toLocaleString(), true, c.smsKey),
+      smsTel: '18909101001',
+      smsTimestamp: Date.now(),
+      callerNumber: '18909101001',
+      calleeNumber: $('#caller').value.trim() || '13625000004',
+      failResult: 'success',
+      ts: Date.now()
+    } : {
+      requestId: uuid(),
+      ts: Date.now(),
+      smsId: 'sandbox-rp-' + Date.now(),
+      smsType: 'outbox',
+      failResult: '',
+      smsBody: xorCrypt($('#text').value || '本机模拟状态', true, c.smsKey),
+      smsStatus: '0',
+      callerNumber: $('#caller').value.trim() || '13625000004',
+      calleeNumber: $('#callee').value.trim() || '15159900003'
+    };
+    const { raw, promise } = createSign(payload, c.secretKey);
+    payload.sign = await promise;
+    $('#signRaw').textContent = raw;
+    $('#reqBody').textContent = JSON.stringify(payload, null, 2);
+    setStatus('', '推送中…');
+    const t0 = performance.now();
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const ms = Math.round(performance.now() - t0);
+      const text = await res.text();
+      let json = text;
+      try { json = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+      showMeta(url, ms, res.status);
+      $('#respBody').textContent = json;
+      setStatus(res.ok ? 'ok' : 'err', res.ok ? '客户回调已应答' : ('HTTP ' + res.status));
+      loadInbox();
+    } catch (e) {
+      setStatus('err', '失败');
+      $('#respBody').textContent = String(e && e.message || e);
+    }
+  }
+
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+    document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'pane-' + t.dataset.tab));
+  }));
+
+  document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    const id = b.getAttribute('data-copy');
+    const el = $('#' + id);
+    try {
+      await navigator.clipboard.writeText(el.value);
+      setStatus('ok', '已复制');
+    } catch (e) {
+      el.select();
+      setStatus('warn', '请手动复制');
+    }
+  }));
+
+  $('#btnSave').addEventListener('click', save);
+  $('#btnReset').addEventListener('click', () => {
+    $('#apiKey').value = DEFAULTS.apiKey;
+    $('#secretKey').value = DEFAULTS.secretKey;
+    $('#smsKey').value = DEFAULTS.smsKey;
+    save();
+  });
+  $('#btnSend').addEventListener('click', () => doSend(false));
+  $('#btnPreview').addEventListener('click', () => doSend(true));
+  $('#btnBearer').addEventListener('click', doBearer);
+  $('#btnVerify').addEventListener('click', verifySign);
+  $('#btnDecrypt').addEventListener('click', decryptBody);
+  $('#btnSampleMo').addEventListener('click', () => fillSample('mo'));
+  $('#btnSampleReport').addEventListener('click', () => fillSample('report'));
+  $('#btnSelfMo').addEventListener('click', () => selfPush('mo'));
+  $('#btnSelfReport').addEventListener('click', () => selfPush('report'));
+  $('#btnInboxRefresh').addEventListener('click', loadInbox);
+  $('#btnInboxClear').addEventListener('click', clearInbox);
+  $('#baseUrl').addEventListener('change', refreshHookUrls);
+
+  load();
+  refreshHookUrls();
+  loadInbox();
+  setInterval(loadInbox, 3000);
+})();
+</script>
+</body>
+</html>

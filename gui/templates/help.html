@@ -1,0 +1,45 @@
+{% extends 'fullwidth_layout.html' %}
+
+{% block title %}{{ _('Help Center') }}{% endblock %}
+
+{% block custom_css %}
+  {{ link_tag('help') }}
+{% endblock %}
+
+{% block body %}
+<div class="help-page">
+
+  {% if active_doc %}
+  <div class="help-viewer-bar">
+    <a class="help-btn" href="/help"><i class="ti ti-arrow-left"></i> 返回帮助中心</a>
+    <div>
+      <div class="title">{{ active_doc.title }}</div>
+      <div class="sub">{{ active_doc.desc }}</div>
+    </div>
+    <span class="spacer"></span>
+    <a class="help-btn primary" href="{{ doc_url }}" target="_blank" rel="noopener">
+      <i class="ti ti-external-link"></i> 新窗口打开
+    </a>
+  </div>
+  <iframe class="help-viewer-frame" src="{{ doc_url }}" title="{{ active_doc.title }}"></iframe>
+
+  {% else %}
+  <div class="help-hero">
+    <h2>帮助中心</h2>
+    <p>查阅 UFI 对接、开户与运维文档。文档随管理台更新，可直接对照现网页面操作。</p>
+  </div>
+
+  <div class="help-grid">
+    {% for doc in docs %}
+    <a class="help-card" href="/help/{{ doc.slug }}">
+      <span class="tag">{{ doc.tag }}</span>
+      <h3>{{ doc.title }}</h3>
+      <p>{{ doc.desc }}</p>
+      <span class="meta">{{ doc.meta }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

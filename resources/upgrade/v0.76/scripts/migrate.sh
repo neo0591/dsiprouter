@@ -26,13 +26,6 @@ cp -af ${OLD_PROJECT_DIR}/venv/. ${NEW_PROJECT_DIR}/venv/
 
 
 printdbg 'validating system configuration'
-if ! env DSIP_PROJECT_DIR="$NEW_PROJECT_DIR" \
-DSIP_SYSTEM_CONFIG_DIR="$DSIP_SYSTEM_CONFIG_DIR" \
-${NEW_PROJECT_DIR}/dsiprouter.sh licensemanager -check tag=DSIP_CORE; then
-    printerr 'A DSIP_CORE license is required to use the auto upgrade feature'
-    echo 'Consider supporting the hard working engineers maintaining this software if you would like to use this feature'
-    exit 1
-fi
 
 printdbg 'backing up configs just in case the upgrade fails'
 mkdir -p "$CURR_BACKUP_DIR"

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Size-based rotation only takes effect when logrotate runs.
+# cron.daily is too slow for SIP/SQL floods; check these files every hour.
+/usr/sbin/logrotate /etc/logrotate.d/dsiprouter \
+  /etc/logrotate.d/kamailio \
+  /etc/logrotate.d/dsip-rsyslog-size

@@ -1,6 +1,6 @@
 {% extends 'fullwidth_layout.html' %}
 
-{% block title %}Dashboard{% endblock %}
+{% block title %}{{ _('Dashboard') }}{% endblock %}
 
 {% block custom_css %}
   {{ link_tag('dashboard') }}
@@ -9,10 +9,10 @@
 {% block body %}
 
   <div class="wrapper-horizontal edge-centered children-align-inherit content-header">
-    <h2>Dashboard</h2>
+    <h2>{{ _('Dashboard') }}</h2>
 
     {% if reloadstatus %}
-      <h3>Kamailio Reload: {{ reloadstatus }}</h3>
+      <h3>{{ _('Kamailio Reload: %(status)s', status=reloadstatus) }}</h3>
     {% endif %}
   </div>
 
@@ -22,33 +22,33 @@
       <div class="col-12 col-sm-6 col-md-3">
         <div class="metric-card">
           <div class="metric-icon metric-icon-sip">☎</div>
-          <div class="metric-label">Active SIP Calls</div>
+          <div class="metric-label">{{ _('Active SIP Calls') }}</div>
           <div class="metric-value" id="active-calls">0</div>
-          <div class="metric-subtitle">Currently Active</div>
+          <div class="metric-subtitle">{{ _('Currently Active') }}</div>
         </div>
       </div>
       <div class="col-12 col-sm-6 col-md-3">
         <div class="metric-card">
           <div class="metric-icon metric-icon-queue">⏳</div>
-          <div class="metric-label">Queued SIP Messages</div>
+          <div class="metric-label">{{ _('Queued SIP Messages') }}</div>
           <div class="metric-value" id="queued-messages">0</div>
-          <div class="metric-subtitle">In Queue</div>
+          <div class="metric-subtitle">{{ _('In Queue') }}</div>
         </div>
       </div>
       <div class="col-12 col-sm-6 col-md-3">
         <div class="metric-card">
           <div class="metric-icon metric-icon-cps">📊</div>
-          <div class="metric-label">Calls Per Second</div>
+          <div class="metric-label">{{ _('Calls Per Second') }}</div>
           <div class="metric-value" id="cps-value">0</div>
-          <div class="metric-subtitle">Calls Per Second</div>
+          <div class="metric-subtitle">{{ _('Calls Per Second') }}</div>
         </div>
       </div>
       <div class="col-12 col-sm-6 col-md-3">
         <div class="metric-card">
           <div class="metric-icon metric-icon-fail">⚠</div>
-          <div class="metric-label">Registration Failures</div>
+          <div class="metric-label">{{ _('Registration Failures') }}</div>
           <div class="metric-value" id="reg-failures">0</div>
-          <div class="metric-subtitle">Reg Failures</div>
+          <div class="metric-subtitle">{{ _('Reg Failures') }}</div>
         </div>
       </div>
     </div>
@@ -57,11 +57,11 @@
     <div class="row">
       <div class="col-12 col-md-6">
         <div class="chart-container">
-          <div class="chart-title">Endpoint Group Messages(Last 4 Hours)</div>
+          <div class="chart-title">{{ _('Endpoint Group Messages(Last 4 Hours)') }}</div>
           <div class="chart-legend">
             <div class="legend-item">
               <span class="legend-color" style="background-color: #ff9800;"></span>
-              <span>Endpoint Group Messages</span>
+              <span>{{ _('Endpoint Group Messages') }}</span>
             </div>
           </div>
           <div class="chart-canvas">
@@ -71,11 +71,11 @@
       </div>
       <div class="col-12 col-md-6">
         <div class="chart-container">
-          <div class="chart-title">Carrier Group Messages(Last 4 Hours)</div>
+          <div class="chart-title">{{ _('Carrier Group Messages(Last 4 Hours)') }}</div>
           <div class="chart-legend">
             <div class="legend-item">
               <span class="legend-color" style="background-color: #1976d2;"></span>
-              <span>Carrier Group Messages</span>
+              <span>{{ _('Carrier Group Messages') }}</span>
             </div>
           </div>
           <div class="chart-canvas">
@@ -87,11 +87,57 @@
 
     
     <div class="row">
+      <div class="col-12">
+        <div class="chart-container" style="height: auto;">
+          <div class="chart-title">{{ _('Management Entry') }}</div>
+          <div class="row">
+            <div class="col-12 col-md-3">
+              <a class="navlink" href="/setup">
+                <div class="metric-card">
+                  <div class="metric-icon"><i class="ti ti-route"></i></div>
+                  <div class="metric-label">{{ _('Setup Wizard') }}</div>
+                  <div class="metric-subtitle">{{ _('UFI to VOS phone path in four steps') }}</div>
+                </div>
+              </a>
+            </div>
+            <div class="col-12 col-md-3">
+              <a class="navlink" href="/onboarding">
+                <div class="metric-card">
+                  <div class="metric-icon"><i class="ti ti-user-plus"></i></div>
+                  <div class="metric-label">{{ _('Account Setup') }}</div>
+                  <div class="metric-subtitle">{{ _('Batch UFI IMEI and SIM accounts') }}</div>
+                </div>
+              </a>
+            </div>
+            <div class="col-12 col-md-3">
+              <a class="navlink" href="/phones">
+                <div class="metric-card">
+                  <div class="metric-icon"><i class="ti ti-phone"></i></div>
+                  <div class="metric-label">{{ _('Phones') }}</div>
+                  <div class="metric-subtitle">{{ _('Bind SIM numbers to extensions such as 1002') }}</div>
+                </div>
+              </a>
+            </div>
+            <div class="col-12 col-md-3">
+              <a class="navlink" href="/cdrs">
+                <div class="metric-card">
+                  <div class="metric-icon"><i class="ti ti-list-details"></i></div>
+                  <div class="metric-label">{{ _('Call Detail Records') }}</div>
+                  <div class="metric-subtitle">{{ _('Review completed and in-progress calls') }}</div>
+                </div>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
 
       <!-- System Status -->
       <div class="col-12 col-md-4">
         <div class="status-panel" id="status-panel">
-          <div class="status-panel-title">System Status</div>
+          <div class="status-panel-title">{{ _('System Status') }}</div>
           <div id="systems-container">
           </div>
         </div>
@@ -100,7 +146,7 @@
       <!-- Endpoints -->
        <div class="col-12 col-md-4">
         <div class="status-panel">
-          <div class="status-panel-title">Top Endpoints Groups</div>
+          <div class="status-panel-title">{{ _('Top Endpoints Groups') }}</div>
           <ul class="endpoint-list" id="endpoints-list">
           </ul>
         </div>
@@ -111,7 +157,7 @@
       <!-- Alerts -->
       <div class="col-12 col-md-4">
         <div class="status-panel">
-          <div class="status-panel-title">Alerts</div>
+          <div class="status-panel-title">{{ _('Alerts') }}</div>
           <div id="alerts-container">
           </div>
         </div>

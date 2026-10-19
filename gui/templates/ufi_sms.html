@@ -1,0 +1,458 @@
+{% extends 'fullwidth_layout.html' %}
+
+{% block title %}{{ _('UFI SMS Center') }}{% endblock %}
+
+{% block custom_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='ufi-sms/tokens.css') }}?v={{ staticAssetVersion('ufi-sms/tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ufi-sms/app.css') }}?v={{ staticAssetVersion('ufi-sms/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ufi-sms/embed.css') }}?v={{ staticAssetVersion('ufi-sms/embed.css') }}">
+{% endblock %}
+
+{% block body %}
+<div class="ufi-sms" id="shell">
+
+  <!-- ══════════ 横向 TAB 导航（对齐 ufi-console 风格） ══════════ -->
+  <nav class="ufi-view-tabs" aria-label="短信管理视图">
+    <button type="button" class="ufi-tab navitem is-active" data-v="compose" data-menu="biz.sms.compose">发送短信</button>
+    <button type="button" class="ufi-tab navitem" data-v="campaign" data-menu="biz.sms.campaign">群发短信 <span class="tab-count" id="cntCampaign">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="records" data-menu="biz.sms.records">短信记录 <span class="tab-count" id="cntRecords">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="channels" data-menu="biz.sms.channels">通道与频控 <span class="tab-count" id="cntChannels">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="tpl" data-menu="biz.sms.tpl">短信模板 <span class="tab-count" id="cntTpl">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="blacklist" data-menu="biz.sms.blacklist">黑名单 <span class="tab-count" id="cntBlack">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="words" data-menu="biz.sms.words">敏感词 <span class="tab-count" id="cntWords">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="openapi" data-menu="biz.sms.openapi">开放 API <span class="tab-count" id="cntKeys">0</span></button>
+    <div class="ufi-view-tabs__meta">
+      <span class="cc-crumb"><b id="crumbTitle">发送短信</b><span class="sub" id="crumbSub">UFI 池 = 平台短信线路通道 · SIP MESSAGE 中继</span></span>
+      <button class="pill clickable" id="pillKsr" title="dSIPRouter 106.75.29.22 · 我方自建">
+        <span class="dot ok"></span>dSIPRouter <b id="pillKsrN">—</b>
+      </button>
+      <button class="pill clickable" id="pillCh" title="可用短信通道（已注册 + SIM 就绪）">
+        <span class="dot ok"></span>可用通道 <b id="pillChN">—</b>
+      </button>
+      <button type="button" class="btn btn--sm nav-btn" id="btnPause" title="暂停/继续实时刷新"><span id="icoPause"></span><span id="txtPause">暂停</span></button>
+      <span class="cc-clock"><span class="clock" id="clock">--:--:--</span></span>
+    </div>
+  </nav>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <main class="main scroll" id="main">
+
+  <!-- ─────────── 1. 发送短信 ─────────── -->
+  <section class="view active" id="v-compose">
+    <div class="view-head">
+      <div class="t">
+        <h2>发送短信</h2>
+        <p>发送以 <b>SIP MESSAGE</b> 下发到 UFI（R-URI=IMEI、X-SMS=收件号码），由 UFI 经运营商送达；<b>输入内容即时校验敏感词与黑名单</b>，夜间静默期内营销类拒绝单发。</p>
+      </div>
+      <div class="acts">
+        <div class="tabs compose-mode" id="composeMode">
+          <button data-cmode="single" class="on"><span data-i="mobile"></span>单发</button>
+          <button data-cmode="bulk"><span data-i="users"></span>群发</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="compose-grid">
+      <div class="panel compose-main">
+        <div class="panel-body">
+          <div id="composePeerZone"></div>
+          <label class="mxtag" style="margin-top:14px">短信内容</label>
+          <textarea class="compose-txt" id="composeBody" rows="9" placeholder="输入短信内容…&#10;· 支持 {变量} 占位（配合模板使用）&#10;· 营销类须含签名与退订方式"></textarea>
+          <div class="compose-meta">
+            <span id="composeCount">0 字 · 1 条</span>
+            <span class="sep"></span>
+            <span id="composeSig">签名：<span id="sigText">【坤势通信】</span><label class="sw" style="margin-left:6px"><input type="checkbox" id="composeSigOn" checked><i></i></label></span>
+            <span class="sp"></span>
+            <button class="btn sm" id="composeClear"><span data-i="trash"></span>清空</button>
+            <button class="btn sm" id="composeSaveTpl"><span data-i="file"></span>存为模板</button>
+            <button class="btn primary" id="composeSend"><span data-i="send"></span><span id="composeSendTxt">立即发送</span></button>
+          </div>
+          <div id="composePreview"></div>
+          <div class="compose-checks" id="composeChecks"></div>
+        </div>
+      </div>
+
+      <div class="compose-side">
+        <div class="panel">
+          <div class="panel-head"><h3><span data-i="file"></span>模板快速插入</h3>
+            <div class="acts"><button class="btn sm" id="composeGoTpl">管理</button></div></div>
+        <div class="panel-body">
+            <select class="sel" id="composeTpl" style="width:100%"></select>
+            <button class="btn" id="composeApplyTpl" style="width:100%;margin-top:8px"><span data-i="edit"></span>应用到编辑框</button>
+            <div id="composeVars"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3><span data-i="antenna"></span>通道与参数</h3></div>
+          <div class="panel-body" id="composeParams"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 2. 短信记录 ─────────── -->
+  <section class="view" id="v-records">
+    <div class="view-head">
+      <div class="t">
+        <h2>短信记录</h2>
+        <p>发送（MT）与上行（MO）全量记录，服务端分页。点「对话」查看与客户的完整往来并可直接回复；「状态日志」查看 SIP 信令原文；失败记录可一键重发。</p>
+      </div>
+      <div class="acts">
+        <button class="btn" data-act="go-compose"><span data-i="send"></span>去发送</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h3><span data-i="inbox"></span>消息流水</h3>
+        <span class="hint">每 3s 刷新</span>
+      </div>
+      <div class="toolbar">
+        <select class="sel sel-filter" id="msgDir">
+          <option value="">全部方向</option>
+          <option value="out">平台发送</option>
+          <option value="in">上行接收</option>
+        </select>
+        <select class="sel sel-filter" id="msgCountry" title="按对端号码国家筛选">
+          <option value="">全部国家</option>
+        </select>
+        <div class="daterange" data-dr="msg">
+          <span class="dr-label">时间</span>
+          <input type="date" class="inp dr-inp" id="msgFrom" title="开始日期">
+          <span class="dr-sep">至</span>
+          <input type="date" class="inp dr-inp" id="msgTo" title="结束日期">
+        </div>
+        <div class="searchbox"><span data-i="search"></span>
+          <input class="inp" id="msgQ" autocomplete="off" placeholder="号码 / 内容关键词，回车过滤">
+        </div>
+        <div class="searchbox"><span data-i="search"></span>
+          <input class="inp" id="msgTask" autocomplete="off" placeholder="任务名称">
+        </div>
+        <span class="tb-count" id="msgCount"></span>
+        <div class="toolbar-acts">
+          <button type="button" class="btn sm" id="msgDateApply">查询</button>
+          <button type="button" class="btn sm" id="msgDateReset">重置</button>
+        </div>
+      </div>
+      <div class="panel-body flush">
+        <div class="tablewrap"><table class="grid"><thead><tr>
+          <th>时间</th><th>任务</th><th>通道 SIM</th><th>方向</th><th>对端号码</th><th>内容</th><th>状态</th><th class="col-act">操作</th>
+        </tr></thead><tbody id="msgBody"></tbody></table></div>
+        <div class="pager-bar" id="pgRecords"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 3. 群发短信 ─────────── -->
+  <section class="view" id="v-campaign">
+    <div class="view-head">
+      <div class="t">
+        <h2>群发短信</h2>
+        <p>须指定<b>发送号码池</b>，支持立即 / 定时 / 每日 / 每周。后台仅从该池可用通道匀速出队；黑名单与敏感词创建时过滤；夜间静默期营销任务自动顺延。</p>
+      </div>
+      <div class="acts">
+        <button class="btn primary" data-act="task-new"><span data-i="plus"></span>新建群发任务</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpiCampaign"></div>
+    <div class="panel">
+      <div class="panel-head"><h3><span data-i="send"></span>任务列表</h3>
+        <span class="hint">含周期计划 · 进度每 3s 刷新</span></div>
+      <div class="toolbar">
+        <select class="sel sel-filter" id="taskKindFilter">
+          <option value="">全部类型</option>
+          <option value="batch">批次任务</option>
+          <option value="recur">周期计划</option>
+        </select>
+        <div class="daterange" data-dr="task">
+          <span class="dr-label">创建时间</span>
+          <input type="date" class="inp dr-inp" id="taskFrom" title="开始日期">
+          <span class="dr-sep">至</span>
+          <input type="date" class="inp dr-inp" id="taskTo" title="结束日期">
+          <button type="button" class="btn sm" id="taskDateApply">查询</button>
+          <button type="button" class="btn sm" id="taskDateReset">重置</button>
+        </div>
+        <span class="tb-count" id="taskCount"></span>
+      </div>
+      <div class="panel-body flush">
+        <div class="tablewrap"><table class="grid"><thead><tr>
+        <th>任务</th><th>类型</th><th>号码池</th><th>模板</th><th class="num">收件人</th><th class="num">速率</th><th>进度 / 计划</th><th>状态</th><th class="col-act">操作</th>
+      </tr></thead><tbody id="taskBody"></tbody></table></div>
+        <div class="pager-bar" id="pgCampaign"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 通道与频控 ─────────── -->
+  <section class="view" id="v-channels">
+    <div class="view-head">
+      <div class="t">
+        <h2>通道与频控</h2>
+        <p>短信通道 = <b>已注册 + SIM 就绪</b> 的 UFI（按 IMEI 关联设备台账）。发送策略与频控参数保存在 dSIPRouter，保存即时生效。</p>
+      </div>
+      <div class="acts">
+        <button class="btn" data-act="go-cc"><span data-i="headset"></span>呼叫中心线路配置 ↗</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpiChannels"></div>
+    <div id="chPane"></div>
+  </section>
+
+  <!-- ─────────── 6. 短信模板 ─────────── -->
+  <section class="view" id="v-tpl">
+    <div class="view-head">
+      <div class="t">
+        <h2>短信模板</h2>
+        <p>通知 / 营销 / 验证码三类模板，支持 <code>{变量}</code> 占位。发送页与群发任务引用模板；营销类模板建议自带签名与退订方式。</p>
+      </div>
+      <div class="acts">
+        <button class="btn primary" data-act="tpl-new"><span data-i="plus"></span>新建模板</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3><span data-i="file"></span>模板库</h3>
+        <span class="hint">变量在发送时逐收件人替换</span></div>
+      <div class="toolbar">
+        <div class="daterange" data-dr="tpl">
+          <span class="dr-label">创建时间</span>
+          <input type="date" class="inp dr-inp" id="tplFrom" title="开始日期">
+          <span class="dr-sep">至</span>
+          <input type="date" class="inp dr-inp" id="tplTo" title="结束日期">
+          <button type="button" class="btn sm" id="tplDateApply">查询</button>
+          <button type="button" class="btn sm" id="tplDateReset">重置</button>
+        </div>
+        <span class="tb-count" id="tplCount"></span>
+      </div>
+      <div class="panel-body flush">
+        <div class="tablewrap"><table class="grid"><thead><tr>
+        <th>模板</th><th>类型</th><th>变量</th><th>内容</th><th>引用</th><th class="col-act">操作</th>
+      </tr></thead><tbody id="tplBody"></tbody></table></div>
+        <div class="pager-bar" id="pgTpl"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 7. 黑名单 ─────────── -->
+  <section class="view" id="v-blacklist">
+    <div class="view-head">
+      <div class="t">
+        <h2>黑名单</h2>
+        <p>命中黑名单的号码<b>拒绝发送</b>；群发导入时自动剔除并提示。来源：手动加入 / 回复退订自动加入 / 运营商回执自动加入。</p>
+      </div>
+      <div class="acts">
+        <button class="btn" data-act="black-clear-used"><span data-i="trash"></span>清空手动来源</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpiBlack"></div>
+    <div class="panel">
+      <div class="panel-head"><h3><span data-i="plus"></span>加入黑名单</h3>
+        <span class="hint">每行一个号码，或逗号 / 空格分隔</span></div>
+      <div class="toolbar">
+        <div class="searchbox grow"><span data-i="mobile"></span>
+          <input class="inp" id="blackInput" autocomplete="off" placeholder="1xxxxxxxxxx，可批量粘贴">
+        </div>
+        <select class="sel sel-filter" id="blackSrc">
+          <option value="手动">来源：手动</option>
+          <option value="退订">来源：退订</option>
+          <option value="运营商">来源：运营商</option>
+        </select>
+        <button class="btn primary" id="blackAdd"><span data-i="plus"></span>加入</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3><span data-i="shield"></span>名单</h3>
+        <div class="acts">
+          <select class="sel sel-filter" id="blackFilter">
+            <option value="">全部来源</option><option>手动</option><option>退订</option><option>运营商</option>
+          </select>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="daterange" data-dr="black">
+          <span class="dr-label">加入时间</span>
+          <input type="date" class="inp dr-inp" id="blackFrom" title="开始日期">
+          <span class="dr-sep">至</span>
+          <input type="date" class="inp dr-inp" id="blackTo" title="结束日期">
+          <button type="button" class="btn sm" id="blackDateApply">查询</button>
+          <button type="button" class="btn sm" id="blackDateReset">重置</button>
+        </div>
+        <span class="tb-count" id="blackListCount"></span>
+      </div>
+      <div class="panel-body flush">
+        <div class="tablewrap"><table class="grid"><thead><tr>
+        <th>号码</th><th>来源</th><th>加入时间</th><th class="col-act">操作</th>
+      </tr></thead><tbody id="blackBody"></tbody></table></div>
+        <div class="pager-bar" id="pgBlack"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 8. 敏感词 ─────────── -->
+  <section class="view" id="v-words">
+    <div class="view-head">
+      <div class="t">
+        <h2>敏感词</h2>
+        <p>发送内容与群发模板<b>即时校验</b>，命中即拦截（编辑框下方实时提示，服务端二次复核）。词库可随时增删，立即生效。</p>
+      </div>
+      <div class="acts">
+        <button class="btn primary" data-act="word-add-show"><span data-i="plus"></span>添加敏感词</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpiWords"></div>
+    <div class="panel">
+      <div class="panel-head"><h3><span data-i="plus"></span>添加敏感词</h3>
+        <span class="hint">支持一次多个，逗号 / 空格分隔</span></div>
+      <div class="toolbar">
+        <div class="searchbox grow"><span data-i="alert-tri"></span>
+          <input class="inp" id="wordInput" autocomplete="off" placeholder="如：贷款，返现（可批量）">
+        </div>
+        <button class="btn primary" id="wordAdd"><span data-i="plus"></span>添加</button>
+      </div>
+    </div>
+    <div class="grid-side">
+      <div class="panel">
+        <div class="panel-head"><h3><span data-i="alert-tri"></span>词库</h3>
+          <span class="hint">点击词条右侧 × 删除</span></div>
+        <div class="panel-body">
+          <div class="word-chips" id="wordChips"></div>
+          <div class="pager-bar" id="pgWords"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3><span data-i="eye"></span>命中测试</h3>
+          <span class="hint">粘贴内容即时检测</span></div>
+        <div class="panel-body">
+          <textarea class="inp" id="wordTest" rows="5" style="width:100%" placeholder="粘贴一段短信内容测试命中…"></textarea>
+          <div id="wordTestOut" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 9. 开放 API ─────────── -->
+  <section class="view" id="v-openapi">
+    <div class="view-head">
+      <div class="t">
+        <h2>开放短信 API</h2>
+        <p>第三方对接协议：UTF-8 JSON · <code>ts</code>+SHA256(<code>sign</code>) · <code>sendSms</code>。密钥含 <code>api_key</code> / <code>secret_key</code> / <code>sms_key</code>。完整说明见 <a href="/help/sms-api" target="_blank">帮助中心 · 短信 API</a>；联调可用 <a href="/ufi-sms-sandbox" target="_blank">模拟对接页</a> / <a href="/static/postman/UFI_SMS_OpenAPI.postman_collection.json">Postman 集合</a>。</p>
+      </div>
+      <div class="acts">
+        <button class="btn primary" id="btnKeyNew"><span data-i="plus"></span>新建 API Key</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpiOpenapi"></div>
+    <div class="panel">
+      <div class="panel-head">
+        <h3><span data-i="shield"></span>接入 IP 白名单</h3>
+        <span class="hint">保护短信 OpenAPI 与通话运营商组（VOS）对接 · 支持 CIDR</span>
+        <div class="acts">
+          <button class="btn sm primary" type="button" id="btnWlAdd"><span data-i="plus"></span>添加 IP</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="note info" style="margin:0 0 12px" id="wlHint"></div>
+        <div class="wl-cfg-bar">
+          <label class="sw-row" title="开启后，非名单 IP 调用短信 API 将返回 403">
+            <span class="sw"><input type="checkbox" id="wlSmsEn"><i></i></span>
+            <span class="txt">启用短信 API</span>
+          </label>
+          <label class="sw-row" title="开启后同步到 Kamailio address，并限制新增运营商网关 IP">
+            <span class="sw"><input type="checkbox" id="wlCarrierEn"><i></i></span>
+            <span class="txt">启用通话运营商组</span>
+          </label>
+          <button class="btn sm" type="button" id="btnWlSaveCfg">保存开关</button>
+          <span class="mxtag" id="wlClientIp"></span>
+        </div>
+        <div class="tablewrap"><table class="grid"><thead><tr>
+          <th>IP / CIDR</th><th>适用范围</th><th>备注</th><th>状态</th><th>创建</th><th class="col-act">操作</th>
+        </tr></thead><tbody id="wlBody"></tbody></table></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3><span data-i="link"></span>对接端点</h3>
+        <span class="hint">Base URL 随当前站点变化</span></div>
+      <div class="panel-body">
+        <pre class="codeblock" id="openapiEndpoints" style="white-space:pre-wrap;font-size:12.5px;line-height:1.6;margin:0"></pre>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3><span data-i="key"></span>API Key 列表</h3>
+        <span class="hint">可编辑 secret_key / sms_key；推送与验签均使用这些密钥</span>
+        <div class="acts">
+          <button class="btn sm primary" id="btnKeyNew2" type="button"><span data-i="plus"></span>新增</button>
+        </div>
+      </div>
+      <div class="panel-body flush">
+        <div class="tablewrap"><table class="grid"><thead><tr>
+          <th>应用</th><th>api_key</th><th>secret</th><th>绑定池</th><th>状态</th><th>最近使用</th><th>创建</th><th class="col-act">操作</th>
+        </tr></thead><tbody id="keyBody"></tbody></table></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3><span data-i="code"></span>调用示例（curl）</h3></div>
+      <div class="panel-body">
+        <pre class="codeblock" id="openapiCurl" style="white-space:pre-wrap;font-size:12.5px;line-height:1.55;margin:0"></pre>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h3><span data-i="inbox"></span>API 调用日志</h3>
+        <span class="hint">客户调用我方 · 我方推送客户 · 保留约 30 天</span>
+        <div class="acts">
+          <button class="btn sm" type="button" id="btnApiLogRefresh">刷新</button>
+        </div>
+      </div>
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+        <select class="sel sel-filter" id="apiLogDir">
+          <option value="">全部方向</option>
+          <option value="in">客户 → 平台</option>
+          <option value="out">平台 → 客户</option>
+        </select>
+        <select class="sel sel-filter" id="apiLogCarrier">
+          <option value="">全部运营商组</option>
+        </select>
+        <div class="daterange" data-dr="apilog">
+          <span class="dr-label">时间</span>
+          <input type="date" class="inp dr-inp" id="apiLogFrom" title="开始日期">
+          <span class="dr-sep">至</span>
+          <input type="date" class="inp dr-inp" id="apiLogTo" title="结束日期">
+        </div>
+        <input class="inp" id="apiLogCaller" autocomplete="off" placeholder="主叫号码" style="width:130px">
+        <input class="inp" id="apiLogCallee" autocomplete="off" placeholder="被叫号码" style="width:130px">
+        <button type="button" class="btn sm primary" id="apiLogApply">查询</button>
+        <button type="button" class="btn sm" id="apiLogReset">重置</button>
+        <span class="tb-count" id="apiLogCount"></span>
+      </div>
+      <div class="panel-body flush">
+        <div class="tablewrap"><table class="grid"><thead><tr>
+          <th>时间</th><th>方向</th><th>接口</th><th>主叫</th><th>被叫</th><th>短信内容</th><th>运营商组</th><th>结果</th><th>耗时</th><th class="col-act">详情</th>
+        </tr></thead><tbody id="apiLogBody"></tbody></table></div>
+        <div class="pager-bar" id="pgApiLogs"></div>
+      </div>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<!-- ══════════ OVERLAYS ══════════ -->
+<div class="modal-mask" id="modalMask"></div>
+<div class="modal" id="modal" role="dialog">
+  <div class="modal-hd">
+    <h3 id="modalTitle">—</h3>
+    <div class="acts"><button class="iconbtn" id="modalClose"><span data-i="x"></span></button></div>
+  </div>
+  <div class="modal-bd" id="modalBody"></div>
+  <div class="modal-ft" id="modalFoot"></div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+{% endblock %}
+
+{% block custom_js %}
+  <script>window.UFI_SIP_DOMAIN = {{ (ufi_sip_domain or '')|tojson }};</script>
+  <script src="{{ url_for('static', filename='ufi-sms/icons.js') }}?v={{ staticAssetVersion('ufi-sms/icons.js') }}"></script>
+  <script src="{{ url_for('static', filename='ufi-sms/geo.js') }}?v={{ staticAssetVersion('ufi-sms/geo.js') }}"></script>
+  <script src="{{ url_for('static', filename='ufi-sms/data.js') }}?v={{ staticAssetVersion('ufi-sms/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='ufi-sms/app.js') }}?v={{ staticAssetVersion('ufi-sms/app.js') }}"></script>
+{% endblock %}

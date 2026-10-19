@@ -1,0 +1,16 @@
+.onboarding-result {
+  margin: 8px 0 12px 0;
+  padding: 12px;
+  border-radius: 4px;
+  background: #eef8ee;
+  border: 1px solid #c5e4c5;
+}
+
+.onboarding-result.error {
+  background: #fff5f5;
+  border-color: #f0c2c2;
+}
+
+#import textarea {
+  font-family: monospace;
+}
