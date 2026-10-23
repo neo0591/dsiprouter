@@ -49,7 +49,7 @@ def sendJsonRpcCmd(host, method, params=(), timeout=settings.KAM_JSONRPC_TIMEOUT
 
     def sendit(host):
         return requests.post(
-            f'http://{host}:5060{settings.KAM_JSONRPC_ROOTPATH}',
+            f'http://{host}:10560{settings.KAM_JSONRPC_ROOTPATH}',
             headers=headers,
             json=payload,
             timeout=timeout,

@@ -130,3 +130,99 @@ html, body {
 
 /* 群发优化：内容编辑框加大 */
 #composeBody { min-height: 220px; font-size: 15px; line-height: 1.6; }
+
+/* ── 短信告警中心 ── */
+.ufi-sms .ufi-tab .tab-count.is-alert { background: #e03131; color: #fff; }
+.ufi-sms .alert-card {
+  border: 1px solid #e2e8f0; border-left: 4px solid #cbd5e1;
+  border-radius: 10px; padding: 14px 16px; background: #fff; margin-bottom: 10px;
+}
+.ufi-sms .alert-card.unread { border-left-color: #ef4444; background: linear-gradient(90deg, #fffafa 0%, #fff 28%); }
+.ufi-sms .alert-card.warning { border-left-color: #f59e0b; }
+.ufi-sms .alert-card.done { opacity: .72; }
+.ufi-sms .alert-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ufi-sms .alert-title { font-weight: 600; font-size: 14px; }
+.ufi-sms .alert-time { color: #94a3b8; font-size: 12px; }
+.ufi-sms .alert-actions { margin-left: auto; display: flex; gap: 6px; }
+.ufi-sms .alert-sms {
+  margin-top: 8px; background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #334155; line-height: 1.55;
+}
+.ufi-sms .alert-sms .hl { background: #fef08a; border-radius: 2px; padding: 0 2px; }
+.ufi-sms .alert-meta { margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: #94a3b8; }
+.ufi-sms .alert-meta b { color: #64748b; font-weight: 500; }
+.ufi-sms .tag {
+  font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; white-space: nowrap;
+}
+.ufi-sms .tag.danger { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
+.ufi-sms .tag.warn { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.ufi-sms .tag.orange { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+.ufi-sms .tag.purple { background: #faf5ff; color: #9333ea; border: 1px solid #e9d5ff; }
+.ufi-sms .tag.gray { background: #f1f5f9; color: #64748b; }
+.ufi-sms .tag.blue { background: #eef6ff; color: #1e66db; }
+.ufi-sms .tag.green { background: #ecfdf5; color: #10b981; }
+.ufi-sms .alert-card.p3 { border-left-color: #a855f7; }
+.ufi-sms .alert-card.suspect { border-left-color: #94a3b8; }
+.ufi-sms .alert-conf { font-size: 11px; color: #94a3b8; margin-left: 4px; }
+.ufi-sms .tb-result {
+  margin-top: 12px; padding: 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0;
+  font-size: 13px; line-height: 1.55; color: #334155;
+}
+.ufi-sms .tb-result .lv { font-weight: 700; margin-right: 8px; }
+
+/* 选中文字底色（覆盖框架/浅琥珀，保证在白底 textarea / 列表可见） */
+.ufi-sms ::selection,
+.ufi-sms *::selection {
+  background: #F0AD4E !important;
+  color: #1a1d21 !important;
+}
+.ufi-sms ::-moz-selection,
+.ufi-sms *::-moz-selection {
+  background: #F0AD4E !important;
+  color: #1a1d21 !important;
+}
+.ufi-sms textarea::selection,
+.ufi-sms input::selection,
+.ufi-sms #composeBody::selection,
+.ufi-sms #tBody::selection,
+.ufi-sms #cRcpts::selection,
+.ufi-sms #tRcpts::selection {
+  background: #F0AD4E !important;
+  color: #1a1d21 !important;
+}
+
+/* ── 列表 / 正文可选中复制 ── */
+.ufi-sms table.grid tbody td {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+.ufi-sms table.grid tbody td.col-act,
+.ufi-sms table.grid tbody td.col-check,
+.ufi-sms table.grid tbody td.col-act *,
+.ufi-sms table.grid tbody td.col-check * {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+.ufi-sms table.grid tbody td.col-act button { cursor: pointer; }
+.ufi-sms .mono,
+.ufi-sms .copyable,
+.ufi-sms .alert-sms,
+.ufi-sms .alert-meta,
+.ufi-sms .sms-body-cell,
+.ufi-sms .sms-bubble-body,
+.ufi-sms .task-preview,
+.ufi-sms .compose-txt,
+.ufi-sms textarea.inp,
+.ufi-sms textarea.task-body,
+.ufi-sms textarea.task-rcpts,
+.ufi-sms #composeBody,
+.ufi-sms #tBody {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+.ufi-sms .copyable,
+.ufi-sms .sms-body-cell { cursor: text; }
+.ufi-sms .copyable:hover,
+.ufi-sms .sms-body-cell:hover { background: rgba(240, 173, 78, .12); border-radius: 3px; }

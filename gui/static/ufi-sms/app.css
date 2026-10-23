@@ -20,7 +20,11 @@ button { cursor:pointer; border:none; background:none; }
 a { color:var(--dsip-blue); text-decoration:none; }
 h1,h2,h3,h4 { margin:0; font-weight:var(--fw-semi); }
 svg { display:block; flex:none; }
-::selection { background:var(--bg-selected); }
+/* 选中高亮：浅琥珀底在白底上几乎看不见，改用实色琥珀 */
+::selection { background:#F0AD4E; color:#1a1d21; }
+::-moz-selection { background:#F0AD4E; color:#1a1d21; }
+textarea::selection, input::selection { background:#F0AD4E; color:#1a1d21; }
+textarea::-moz-selection, input::-moz-selection { background:#F0AD4E; color:#1a1d21; }
 
 /* scrollbars */
 .scroll { overflow:auto; }
@@ -1628,4 +1632,59 @@ button.var-chip:hover { border-color:var(--dsip-accent); color:var(--tx-1); back
 }
 @media (max-width: 900px) {
   .carrier-hooks { grid-template-columns: 1fr; }
+}
+
+/* ══════════ 通道与频控 · 客户引导优化（chx-） ══════════ */
+.chx-guide{
+  background:linear-gradient(135deg, rgba(47,107,255,.06), rgba(47,107,255,.02));
+  border:1px solid rgba(47,107,255,.22); border-radius:14px;
+  padding:14px 16px; margin-bottom:14px;
+}
+.chx-guide-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.chx-guide-hd > b{font-size:14.5px}
+.chx-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.chx-step{
+  display:flex;gap:10px;align-items:flex-start;text-align:left;width:100%;
+  background:var(--bg-2, rgba(255,255,255,.35)); border:1px solid var(--line);
+  border-radius:11px; padding:11px 12px; cursor:pointer; font:inherit; color:inherit;
+  transition:border-color .15s, transform .1s;
+}
+.chx-step:hover{border-color:var(--accent, var(--pri))}
+.chx-step:active{transform:scale(.98)}
+.chx-step .n{
+  flex-shrink:0;width:22px;height:22px;border-radius:50%;
+  background:var(--accent, var(--pri)); color:#fff; font-weight:700; font-size:12px;
+  display:flex;align-items:center;justify-content:center; margin-top:1px;
+}
+.chx-step .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.chx-step .t b{font-size:13.5px}
+.chx-step .t small{color:var(--tx-3);font-size:12px;line-height:1.5}
+.chx-diag{
+  margin-top:12px;border-radius:9px;padding:9px 13px;font-size:12.5px;line-height:1.6;
+}
+.chx-diag.ok{background:var(--ok-weak, rgba(46,207,138,.1));color:var(--ok)}
+.chx-diag.warn{background:var(--warn-weak, rgba(230,192,123,.12));color:var(--warn)}
+.chx-diag b{font-weight:700}
+.chx-fold{
+  border:1px solid var(--line); border-radius:14px; background:var(--panel, #fff);
+  margin-bottom:14px; overflow:hidden;
+}
+.chx-fold > summary{
+  list-style:none; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:13px 16px; cursor:pointer; user-select:none;
+}
+.chx-fold > summary::-webkit-details-marker{display:none}
+.chx-fold > summary::after{
+  content:'▾'; margin-left:auto; color:var(--tx-3); transition:transform .18s;
+}
+.chx-fold[open] > summary::after{transform:rotate(180deg)}
+.chx-fold > summary:hover{background:rgba(127,127,127,.05)}
+.chx-fold > summary b{font-size:14px}
+.chx-fold > summary .hint{margin:0}
+.chx-fold-bd{padding:14px 16px 16px; border-top:1px solid var(--line)}
+.chx-fold-bd .panel{margin-bottom:14px}
+.chx-fold-bd .panel:last-child{margin-bottom:0}
+.chx-plain{font-size:13px;color:var(--tx-2);margin:0 0 12px}
+@media (max-width: 900px){
+  .chx-steps{grid-template-columns:1fr}
 }

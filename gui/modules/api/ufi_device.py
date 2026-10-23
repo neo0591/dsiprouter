@@ -26,6 +26,12 @@ from shared import debugEndpoint, getRequestData
 from util.ipc import STATE_SHMEM_NAME, getSharedMemoryDict
 import settings
 
+
+def _require_imei(db, imei):
+    from modules.api.acl import ensure_acl_tables, require_owned_imei
+    ensure_acl_tables(db)
+    require_owned_imei(db, imei)
+
 # fields the device firmware excludes from its SHA-256 sign string (verified against device-side log)
 SIGN_SKIP_KEYS = {'sign', 'encryptionType', 'mac', 'simOperator', 'operatorName', 'serviceCellBand', 'cellularSignalRsrp'}
 DEFAULT_UFI_SECRET = '123456'
@@ -57,6 +63,18 @@ def _field(payload, *names, default=''):
     return default
 
 
+def _flag01(value, default='0'):
+    """Normalize device ON/OFF / true/false / 1/0 into '1' or '0'."""
+    s = str(value or '').strip().lower()
+    if not s:
+        return default
+    if s in ('1', 'on', 'true', 'yes', 'enable', 'enabled'):
+        return '1'
+    if s in ('0', 'off', 'false', 'no', 'disable', 'disabled'):
+        return '0'
+    return default
+
+
 UFI_DEVICE_COLUMNS = (
     ('lte_status', "VARCHAR(64) NOT NULL DEFAULT ''"),
     ('sim_type', "VARCHAR(32) NOT NULL DEFAULT ''"),
@@ -77,7 +95,9 @@ UFI_DEVICE_COLUMNS = (
     ('ws_online', "TINYINT NOT NULL DEFAULT 0"),
     ('last_cmd_json', "MEDIUMTEXT"),
     ('pending_settings', "MEDIUMTEXT"),
+    ('saved_settings', "MEDIUMTEXT"),
     ('sim_state', "VARCHAR(32) NOT NULL DEFAULT ''"),
+    ('claim_status', "TINYINT NOT NULL DEFAULT 0"),
     ('tunnel_ready', "TINYINT NOT NULL DEFAULT 0"),
     ('tunnel_admin_host', "VARCHAR(64) NOT NULL DEFAULT '127.0.0.1'"),
     ('tunnel_admin_port', "INT NOT NULL DEFAULT 8080"),
@@ -93,17 +113,20 @@ def _ensure_ufi_tables(db):
         "secret_key VARCHAR(128) NOT NULL DEFAULT '123456',"
         "auto_provision TINYINT NOT NULL DEFAULT 1,"
         "sip_host VARCHAR(128) NOT NULL DEFAULT '',"
-        "sip_port INT NOT NULL DEFAULT 5060,"
+        "sip_port INT NOT NULL DEFAULT 10560,"
         "transport VARCHAR(8) NOT NULL DEFAULT 'UDP',"
         "base_url VARCHAR(255) NOT NULL DEFAULT '',"
         "ws_url VARCHAR(255) NOT NULL DEFAULT ''"
         ")"
     ))
+    cfg_cols = {r[0] for r in db.execute(text("SHOW COLUMNS FROM dsip_ufi_config")).all()}
+    if 'secret_pending' not in cfg_cols:
+        db.execute(text("ALTER TABLE dsip_ufi_config ADD COLUMN secret_pending TINYINT NOT NULL DEFAULT 0"))
     row = db.execute(text("SELECT id FROM dsip_ufi_config WHERE id = 1")).first()
     if row is None:
         db.execute(text(
             "INSERT INTO dsip_ufi_config (id, secret_key, auto_provision, sip_host, sip_port, transport) "
-            "VALUES (1, :secret, 1, :host, 5060, 'UDP')"
+            "VALUES (1, :secret, 1, :host, 10560, 'UDP')"
         ), {
             'secret': str(getattr(settings, 'UFI_API_SECRET', '') or DEFAULT_UFI_SECRET),
             'host': str(getattr(settings, 'EXTERNAL_IP_ADDR', '') or ''),
@@ -214,7 +237,7 @@ def _load_ufi_config(db):
     )).mappings().first()
     cfg = dict(row) if row else {}
     sip_host = str(cfg.get('sip_host') or getattr(settings, 'EXTERNAL_IP_ADDR', '') or _ufi_auth_domain())
-    sip_port = int(cfg.get('sip_port') or 5060)
+    sip_port = int(cfg.get('sip_port') or 10560)
     gui_port = str(getattr(settings, 'DSIP_PORT', '') or '5000')
     default_base = str(cfg.get('base_url') or '').strip()
     default_ws = str(cfg.get('ws_url') or '').strip()
@@ -222,8 +245,15 @@ def _load_ufi_config(db):
         default_base = 'https://{}:{}/ufi-app'.format(sip_host, gui_port)
     if not default_ws:
         default_ws = 'wss://{}:{}/ufi-app/ufi/websocket'.format(sip_host, gui_port)
+    secret = str(cfg.get('secret_key') or '').strip()
+    pending = 1 if secret in ('', '123456') else 0
+    try:
+        db.execute(text("UPDATE dsip_ufi_config SET secret_pending=:p WHERE id=1"), {'p': pending})
+    except Exception:
+        pass
     return {
-        'secret_key': str(cfg.get('secret_key') or DEFAULT_UFI_SECRET),
+        'secret_key': secret,
+        'secret_pending': bool(pending),
         'auto_provision': bool(int(cfg.get('auto_provision') or 0)),
         'sip_host': sip_host,
         'sip_port': sip_port,
@@ -247,8 +277,8 @@ def _canonical_sign_string(payload, secret):
 
 def _sign_fail_reason(payload, secret):
     """Return None if the Hutool SHA-256 sign is valid; otherwise a device-facing comment."""
-    if not secret:
-        return None
+    if not str(secret or '').strip():
+        return 'secret not configured'
     raw_ts = str(payload.get('ts') or '0')
     try:
         ts = int(float(raw_ts))
@@ -296,6 +326,7 @@ def _upsert_device(db, payload, extra=None):
     extra = extra or {}
     sim = extra.get('sim_number') or _field(payload, 'simNumber', 'sim_number')
     voip = _field(payload, 'voipRegisterStatus', 'sipregeststatus')
+    wfc_raw = _field(payload, 'wfcStatus', 'wlanCallingStatus', 'wifiCallingStatus')
     values = {
         'imei': imei,
         'sn': extra.get('sn') or _field(payload, 'sn'),
@@ -319,7 +350,7 @@ def _upsert_device(db, payload, extra=None):
         'signal_level': _field(payload, 'cellularSignalLevel'),
         'earfcn': _field(payload, 'serviceCellEARFCN'),
         'linphone_status': _field(payload, 'linphoneProcessStatus'),
-        'wfc_status': _field(payload, 'wfcStatus', 'wlanCallingStatus'),
+        'wfc_status': _flag01(wfc_raw, '0') if wfc_raw else '',
         'cpu_use': _field(payload, 'cpuUseRate'),
         'mem_use': _field(payload, 'memoryUseRate'),
         'storage_use': _field(payload, 'storageUseRate'),
@@ -328,6 +359,12 @@ def _upsert_device(db, payload, extra=None):
         'raw_json': json.dumps(payload, ensure_ascii=False, default=str)[:16000],
         'status_json': json.dumps(payload, ensure_ascii=False, default=str)[:16000],
     }
+    try:
+        from modules.api.acl import ensure_acl_tables, resolve_device_customer
+        ensure_acl_tables(db)
+        values['customer_id'] = resolve_device_customer(db, imei, values.get('sim_number') or '')
+    except Exception:
+        values['customer_id'] = None
     if not values['last_ip']:
         try:
             values['last_ip'] = _client_ip()
@@ -339,12 +376,12 @@ def _upsert_device(db, payload, extra=None):
         "cellular_network, wlan_status, last_ip, last_msg_type, last_seen, provisioned, raw_json, "
         "lte_status, sim_type, volte_status, voip_status, ws_status, network_type, airplane_mode, "
         "signal_level, earfcn, linphone_status, wfc_status, cpu_use, mem_use, storage_use, "
-        "build_number, status_json, sim_state) "
+        "build_number, status_json, sim_state, customer_id, claim_status) "
         "VALUES (:imei, :sn, :imsi, :sim_number, :agent_type, :sip_reg_status, :cellular_status, "
         ":cellular_network, :wlan_status, :last_ip, :last_msg_type, NOW(), :provisioned, :raw_json, "
         ":lte_status, :sim_type, :volte_status, :voip_status, :ws_status, :network_type, :airplane_mode, "
         ":signal_level, :earfcn, :linphone_status, :wfc_status, :cpu_use, :mem_use, :storage_use, "
-        ":build_number, :status_json, :sim_state) "
+        ":build_number, :status_json, :sim_state, :customer_id, IF(:customer_id IS NULL, 0, 1)) "
         "ON DUPLICATE KEY UPDATE "
         "sn = IF(:sn = '', sn, :sn), "
         "imsi = IF(:imsi = '', imsi, :imsi), "
@@ -355,7 +392,7 @@ def _upsert_device(db, payload, extra=None):
         "cellular_network = IF(:cellular_network = '', cellular_network, :cellular_network), "
         "wlan_status = IF(:wlan_status = '', wlan_status, :wlan_status), "
         "last_ip = IF(:last_ip = '', last_ip, :last_ip), last_msg_type = :last_msg_type, last_seen = NOW(), "
-        "provisioned = GREATEST(provisioned, :provisioned), raw_json = :raw_json, "
+        "provisioned = IF(IF(customer_id IS NULL, :customer_id, customer_id) IS NULL, 0, GREATEST(provisioned, :provisioned)), raw_json = :raw_json, "
         "lte_status = IF(:lte_status = '', lte_status, :lte_status), "
         "sim_type = IF(:sim_type = '', sim_type, :sim_type), "
         "volte_status = IF(:volte_status = '', volte_status, :volte_status), "
@@ -372,7 +409,9 @@ def _upsert_device(db, payload, extra=None):
         "storage_use = IF(:storage_use = '', storage_use, :storage_use), "
         "build_number = IF(:build_number = '', build_number, :build_number), "
         "sim_state = IF(:sim_state = '', sim_state, :sim_state), "
-        "status_json = :status_json"
+        "status_json = :status_json, "
+        "customer_id = IF(customer_id IS NULL, :customer_id, customer_id), "
+        "claim_status = IF(customer_id IS NULL, 0, 1)"
     ), values)
     if extra.get('event'):
         db.execute(text(
@@ -636,6 +675,16 @@ def _ingest_records(db, payload):
             'fail_result': _field(payload, 'failResult'),
             'payload': raw,
         })
+        try:
+            from modules.api.ufi_sms_alert import record_sms_alert
+            sid = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+            record_sms_alert(
+                db, imei=imei, peer=_field(payload, 'smsmTel'),
+                body=_field(payload, 'smsBody'), src='device',
+                src_id=int(sid or 0),
+            )
+        except Exception:
+            pass
     if has_call and not has_sms:
         reject = _field(payload, 'rejectCode')
         # new firmware: single `log` blob + `side`(volte/sip); legacy: separate volteLog/sipLog
@@ -679,6 +728,13 @@ def _row_to_console(row, live, domain):
     item = dict(row)
     raw = _json_obj(item.pop('status_json', None) or item.get('raw_json'))
     pending = _json_obj(item.get('pending_settings'))
+    saved = _json_obj(item.get('saved_settings'))
+
+    def _pref(*vals):
+        for val in vals:
+            if val not in (None, ''):
+                return val
+        return ''
     if item.get('last_seen') is not None:
         item['last_seen'] = str(item['last_seen'])
     # 活性仲裁 = 心跳新鲜度：拔电/断网后 last_seen 不再更新，
@@ -706,8 +762,10 @@ def _row_to_console(row, live, domain):
         'volteRegisterStatus': item.get('volte_status') or raw.get('volteRegisterStatus') or '0',
         'voipRegisterStatus': item.get('voip_status') or raw.get('voipRegisterStatus') or ('1' if online else '0'),
         'websocketStatus': item.get('ws_status') or raw.get('websocketStatus') or ('1' if ws_online else '0'),
-        'wfcStatus': item.get('wfc_status') or raw.get('wfcStatus') or raw.get('wlanCallingStatus') or '0',
-        'airplaneMode': item.get('airplane_mode') or raw.get('airplaneMode') or '0',
+        'wfcStatus': _flag01(
+            item.get('wfc_status') or raw.get('wfcStatus') or raw.get('wlanCallingStatus')
+            or raw.get('wifiCallingStatus'), '0'),
+        'airplaneMode': _flag01(item.get('airplane_mode') or raw.get('airplaneMode'), '0'),
         'cellularSignalLevel': item.get('signal_level') or raw.get('cellularSignalLevel') or '0',
         'serviceCellEARFCN': item.get('earfcn') or raw.get('serviceCellEARFCN') or '0',
         'networkType': item.get('network_type') or raw.get('networkType') or 'none',
@@ -724,9 +782,10 @@ def _row_to_console(row, live, domain):
         'band': raw.get('band') or raw.get('serviceCellBand') or '—',
         'rsrp': raw.get('rsrp') or raw.get('cellularSignalRsrp'),
         'rsrq': raw.get('rsrq'),
-        'sipServerAddress': pending.get('sipServerAddress') or raw.get('sipServerAddress') or domain,
-        'sipServerPort': pending.get('sipServerPort') or raw.get('sipServerPort') or 5060,
-        'sippassWord': pending.get('sippassWord') or (_ufi_password(str(item.get('imei') or '')) if item.get('imei') else ''),
+        'sipServerAddress': _pref(pending.get('sipServerAddress'), saved.get('sipServerAddress'), raw.get('sipServerAddress'), domain),
+        'sipServerPort': _pref(pending.get('sipServerPort'), saved.get('sipServerPort'), raw.get('sipServerPort'), 10560),
+        'sippassWord': '' if not item.get('customer_id') else (pending.get('sippassWord') or (_ufi_password(str(item.get('imei') or '')) if item.get('imei') else '')),
+        'unclaimed': not item.get('customer_id'),
         'transportProtocol': pending.get('transportProtocol') or raw.get('transportProtocol') or 'UDP',
         'encryptionType': pending.get('encryptionType') or raw.get('encryptionType') or 'dtls',
         'smsCryptionStatus': pending.get('smsCryptionStatus') or raw.get('smsCryptionStatus') or 'OFF',
@@ -766,6 +825,7 @@ def _row_to_console(row, live, domain):
         + UFI_SOFTAP_ADMIN
     )
     item.pop('pending_settings', None)
+    item.pop('saved_settings', None)
     item.pop('raw_json', None)
     item.pop('tunnel_json', None)
     return item
@@ -829,6 +889,8 @@ def _handle_sip_setting():
         sign_err = _sign_fail_reason(payload, cfg['secret_key'])
         if sign_err:
             return _device_error(payload, 401, sign_err)
+        if str(cfg.get('secret_key') or '').strip() in ('', '123456'):
+            return _device_error(payload, 401, 'secret not configured')
 
         imei_raw = _field(payload, 'imei')
         try:
@@ -842,18 +904,23 @@ def _handle_sip_setting():
         except http_exceptions.HTTPException:
             sim = re.sub(r'\D', '', _field(payload, 'simNumber', 'sim_number'))
 
-        provisioned = 0
-        if cfg['auto_provision']:
-            domain = _ufi_auth_domain()
-            _upsert_ufi_account(db, imei, sim, domain)
-            provisioned = 1
-            getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
-
         _upsert_device(db, payload, {
             'sim_number': sim,
-            'provisioned': provisioned,
+            'provisioned': 0,
             'sip_reg_status': _field(payload, 'sipregeststatus') or 'none',
         })
+        owned = db.execute(text(
+            "SELECT customer_id FROM dsip_ufi_device WHERE imei=:imei"
+        ), {'imei': imei}).scalar()
+        provisioned = 0
+        if owned and cfg['auto_provision']:
+            from modules.api.acl import tenant_domain
+            _upsert_ufi_account(db, imei, sim, tenant_domain(db, owned))
+            provisioned = 1
+            db.execute(text(
+                "UPDATE dsip_ufi_device SET provisioned=1, claim_status=1 WHERE imei=:imei"
+            ), {'imei': imei})
+            getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
         pending_row = db.execute(text(
             "SELECT pending_settings FROM dsip_ufi_device WHERE imei = :imei"
         ), {'imei': imei}).first()
@@ -872,9 +939,9 @@ def _handle_sip_setting():
             'msgType': 'Ufi-Set-Request',
             'requestId': _field(payload, 'requestId'),
             'lteStatus': 'success',
-            'comment': 'success',
             'sn': _field(payload, 'sn'),
-            'isSet': 'Set' if (cfg['auto_provision'] or pending) else 'None',
+            'isSet': 'Set' if (owned and cfg['auto_provision']) or pending else 'None',
+            'comment': 'success' if owned else 'pending claim',
             'imei': imei,
             'imsi': _field(payload, 'imsi', 'Imsi'),
             'simNumber': sim,
@@ -889,9 +956,9 @@ def _handle_sip_setting():
             'otgStatus': _field(payload, 'otgStatus') or 'OFF',
             'ecmStatus': _field(payload, 'ecmStatus') or 'OFF',
             'transportProtocol': cfg['transport'],
-            'sipServerAddress': sip_host,
-            'sipServerPort': sip_port,
-            'sippassWord': password,
+            'sipServerAddress': sip_host if owned else '',
+            'sipServerPort': sip_port if owned else '',
+            'sippassWord': password if owned else '',
             'sipregeststatus': _field(payload, 'sipregeststatus') or 'none',
             'ufiHotpotstaus': _field(payload, 'ufiHotpotstaus') or 'OFF',
             'hotspotName': _field(payload, 'hotspotName'),
@@ -1080,7 +1147,7 @@ def listUfiDevices():
             "d.last_seen, d.provisioned, d.lte_status, d.sim_type, d.volte_status, d.voip_status, "
             "d.ws_status, d.network_type, d.airplane_mode, d.signal_level, d.earfcn, "
             "d.linphone_status, d.wfc_status, d.cpu_use, d.mem_use, d.storage_use, d.build_number, "
-            "d.ws_online, d.sim_state, d.status_json, d.pending_settings, "
+            "d.ws_online, d.sim_state, d.customer_id, d.claim_status, d.status_json, d.pending_settings, d.saved_settings, "
             "d.tunnel_ready, d.tunnel_admin_host, d.tunnel_admin_port, d.tunnel_admin_path, "
             "(SELECT COUNT(*) FROM location loc WHERE loc.username = d.imei AND loc.expires > NOW()) AS online, "
             "TIMESTAMPDIFF(SECOND, d.last_seen, NOW()) AS gap_sec "
@@ -1104,6 +1171,86 @@ def listUfiDevices():
         db.close()
 
 
+def _delete_ufi_account(db, imei):
+    """删掉该 IMEI 在所有域上的 SIP 账号和别名。"""
+    imei = str(imei or '').strip()
+    if not imei:
+        return
+    db.execute(text("DELETE FROM dbaliases WHERE username=:u"), {'u': imei})
+    db.execute(text("DELETE FROM subscriber WHERE username=:u"), {'u': imei})
+
+
+@api.route('/api/v1/ufi/devices/unclaimed', methods=['GET'])
+@api_security
+def listUnclaimedDevices():
+    from modules.api.acl import is_platform_admin
+    if not is_platform_admin():
+        return createApiResponse(error='http', msg='仅平台管理员可查看待认领设备', status_code=403)
+    db = DummySession()
+    try:
+        db = startSession()
+        _ensure_ufi_tables(db)
+        rows = db.execute(text(
+            "SELECT imei, sn, sim_number, last_seen, last_ip FROM dsip_ufi_device "
+            "WHERE customer_id IS NULL ORDER BY last_seen DESC LIMIT 500"
+        )).mappings().all()
+        data = []
+        for r in rows:
+            d = dict(r)
+            if d.get('last_seen') is not None:
+                d['last_seen'] = str(d['last_seen'])
+            data.append(d)
+        return createApiResponse(msg='unclaimed', data=data)
+    except Exception as ex:
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
+@api.route('/api/v1/ufi/devices/<imei>/claim', methods=['POST'])
+@api_security
+def claimUfiDevice(imei):
+    from modules.api.acl import is_platform_admin, set_device_customer, tenant_domain, ensure_acl_tables
+    if not is_platform_admin():
+        return createApiResponse(error='http', msg='仅平台管理员可认领设备', status_code=403)
+    db = DummySession()
+    try:
+        imei = _normalize_ufi_imei(imei)
+        body = request.get_json(silent=True) or {}
+        cid = int(body.get('customer_id') or 0)
+        if not cid:
+            raise http_exceptions.BadRequest('customer_id is required')
+        db = startSession()
+        _ensure_ufi_tables(db)
+        ensure_acl_tables(db)
+        exists = db.execute(text("SELECT id FROM dsip_customer WHERE id=:i"), {'i': cid}).first()
+        if not exists:
+            raise http_exceptions.BadRequest('客户不存在')
+        dev = db.execute(text("SELECT imei, sim_number FROM dsip_ufi_device WHERE imei=:imei"), {'imei': imei}).mappings().first()
+        if not dev:
+            raise http_exceptions.NotFound('设备不存在')
+        _delete_ufi_account(db, imei)
+        set_device_customer(db, imei, cid)
+        db.execute(text("DELETE FROM dsip_ufi_import WHERE imei=:imei"), {'imei': imei})
+        db.execute(text(
+            "INSERT INTO dsip_ufi_import (customer_id, imei, sim, matched, note, created, matched_at) "
+            "VALUES (:c,:imei,:sim,1,'claimed',NOW(),NOW())"
+        ), {'c': cid, 'imei': imei, 'sim': str(dev.get('sim_number') or '')})
+        _upsert_ufi_account(db, imei, str(dev.get('sim_number') or ''), tenant_domain(db, cid))
+        db.execute(text("UPDATE dsip_ufi_device SET provisioned=1 WHERE imei=:imei"), {'imei': imei})
+        db.commit()
+        getSharedMemoryDict(STATE_SHMEM_NAME)['kam_reload_required'] = True
+        return createApiResponse(msg='已认领')
+    except Exception as ex:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return showApiError(ex)
+    finally:
+        db.close()
+
+
 @api.route('/api/v1/ufi/devices/<imei>', methods=['DELETE'])
 @api_security
 def deleteUfiDevice(imei):
@@ -1117,12 +1264,14 @@ def deleteUfiDevice(imei):
             raise http_exceptions.BadRequest('imei is required')
         db = startSession()
         _ensure_ufi_tables(db)
+        _require_imei(db, imei)
         file_rows = db.execute(text(
             "SELECT stored_path FROM dsip_ufi_file WHERE imei = :imei"
         ), {'imei': imei}).mappings().all()
         deleted = {}
         # child tables first, device row last
-        for table in ('dsip_ufi_file', 'dsip_ufi_call', 'dsip_ufi_sms', 'dsip_ufi_event', 'dsip_ufi_device'):
+        _delete_ufi_account(db, imei)
+        for table in ('dsip_ufi_file', 'dsip_ufi_call', 'dsip_ufi_sms', 'dsip_ufi_event', 'dsip_ufi_alert', 'dsip_ufi_device'):
             r = db.execute(text(
                 "DELETE FROM {} WHERE imei = :imei".format(table)
             ), {'imei': imei})
@@ -1162,12 +1311,16 @@ def listUfiAlerts():
             debugEndpoint()
         db = startSession()
         _ensure_ufi_tables(db)
+        from modules.api.acl import scoped_imei
         imei = str(request.args.get('imei') or '').strip()
         sql = ("SELECT imei, kind, level, detail, offline_from, offline_to, created_at "
-               "FROM dsip_ufi_alert")
+               "FROM dsip_ufi_alert WHERE 1=1")
         params = {}
+        frag, fp = scoped_imei('')
+        sql += frag
+        params.update(fp)
         if imei:
-            sql += " WHERE imei = :imei"
+            sql += " AND imei = :imei"
             params['imei'] = imei
         sql += " ORDER BY id DESC LIMIT 200"
         rows = db.execute(text(sql), params).mappings().all()
@@ -1210,7 +1363,7 @@ def ufiDeviceConfig():
             else:
                 auto_flag = 1 if current['auto_provision'] else 0
             sip_host = _field(payload, 'sip_host') or current['sip_host']
-            sip_port = int(payload.get('sip_port') or current['sip_port'] or 5060)
+            sip_port = int(payload.get('sip_port') or current['sip_port'] or 10560)
             transport = (_field(payload, 'transport') or current['transport'] or 'UDP').upper()
             base_url = _field(payload, 'base_url')
             ws_url = _field(payload, 'ws_url')
@@ -1248,6 +1401,7 @@ def getUfiDevice(imei):
             debugEndpoint()
         db = startSession()
         _ensure_ufi_tables(db)
+        _require_imei(db, imei)
         row = db.execute(text(
             "SELECT * FROM dsip_ufi_device WHERE imei = :imei"
         ), {'imei': imei}).mappings().first()
@@ -1355,9 +1509,10 @@ def sendUfiDeviceCommand(imei):
                 value = payload.get(key)
                 if value not in (None, ''):
                     body[key] = value
-        result = send_ufi_command(imei, body)
         db = startSession()
         _ensure_ufi_tables(db)
+        _require_imei(db, imei)
+        result = send_ufi_command(imei, body)
         db.execute(text(
             "UPDATE dsip_ufi_device SET last_cmd_json = :raw WHERE imei = :imei"
         ), {'raw': json.dumps(result, ensure_ascii=False, default=str)[:16000], 'imei': imei})
@@ -1598,10 +1753,14 @@ def _rewrite_proxied_body(body, content_type, imei):
 @api_security
 def getUfiDeviceTunnel(imei):
     """Admin tunnel status for reverse management (no device private IP)."""
+    db = DummySession()
     try:
         if settings.DEBUG:
             debugEndpoint()
         imei = str(imei or '').strip()
+        db = startSession()
+        _ensure_ufi_tables(db)
+        _require_imei(db, imei)
         from modules.api.ufi_ws import get_ufi_tunnel, UFI_SOFTAP_ADMIN, ws_connected_imeis
         tunnel = get_ufi_tunnel(imei)
         ws_on = imei in ws_connected_imeis()
@@ -1619,15 +1778,17 @@ def getUfiDeviceTunnel(imei):
         }])
     except Exception as ex:
         return showApiError(ex)
+    finally:
+        db.close()
 
 
 @api.route('/api/v1/ufi/devices/<imei>/admin-proxy/', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
 @api.route('/api/v1/ufi/devices/<imei>/admin-proxy/<path:subpath>', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
+@api_security
 def ufiDeviceAdminProxy(imei, subpath=''):
     """
     Cloud reverse proxy into device local admin (via WS admin_http_proxy).
-    Public entry: no platform login required — device admin UI has its own password.
-    Still hides device private/LAN addresses; SoftAP is field-only fallback.
+    Login required. A tenant can only open a tunnel for its own IMEI.
     """
     from flask import Response
     from modules.api.ufi_ws import proxy_ufi_admin_http, get_ufi_tunnel, UFI_SOFTAP_ADMIN
@@ -1635,9 +1796,14 @@ def ufiDeviceAdminProxy(imei, subpath=''):
     imei = str(imei or '').strip()
     if not imei:
         raise http_exceptions.BadRequest('imei is required')
-    # Basic IMEI shape guard (digits); avoids turning the proxy into an open scanner.
     if not re.fullmatch(r'[0-9A-Za-z]{8,32}', imei):
         raise http_exceptions.BadRequest('imei is invalid')
+    db = startSession()
+    try:
+        _ensure_ufi_tables(db)
+        _require_imei(db, imei)
+    finally:
+        db.close()
 
     tunnel = get_ufi_tunnel(imei)
     if tunnel is None or not tunnel.get('ready'):
@@ -1758,9 +1924,11 @@ def saveUfiDeviceSettings(imei):
         dispatch = str(payload.get('dispatch') or '').lower() in ('1', 'true', 'yes', 'on')
         db = startSession()
         _ensure_ufi_tables(db)
+        _require_imei(db, imei)
+        raw_settings = json.dumps(settings_body, ensure_ascii=False, default=str)[:16000]
         db.execute(text(
-            "UPDATE dsip_ufi_device SET pending_settings = :raw WHERE imei = :imei"
-        ), {'raw': json.dumps(settings_body, ensure_ascii=False, default=str)[:16000], 'imei': imei})
+            "UPDATE dsip_ufi_device SET pending_settings = :raw, saved_settings = :raw WHERE imei = :imei"
+        ), {'raw': raw_settings, 'imei': imei})
         db.commit()
         from modules.api.ufi_ws import send_ufi_command, ws_connected_imeis
         result = {'ok': True, 'queued': True, 'sent': settings_body, 'dispatched': False}
@@ -1795,6 +1963,7 @@ def saveUfiDeviceSim(imei):
             return createApiResponse(error='http', status_code=400, msg='SIM 号码需为 5–20 位数字')
         db = startSession()
         _ensure_ufi_tables(db)
+        _require_imei(db, imei)
         found = db.execute(text(
             "SELECT id FROM dsip_ufi_device WHERE imei=:imei"
         ), {'imei': imei}).first()
@@ -2060,18 +2229,22 @@ def listUfiRecords():
             debugEndpoint()
         db = startSession()
         _ensure_ufi_tables(db)
+        from modules.api.acl import scoped_imei
+        sms_frag, sms_p = scoped_imei('')
+        call_frag, call_p = scoped_imei('c')
+        ev_frag, ev_p = scoped_imei('')
         sms_rows = db.execute(text(
             "SELECT imei, sms_id, sms_type, sms_body, smsm_tel, sms_timestamp, result_code, fail_result, created_at "
-            "FROM dsip_ufi_sms ORDER BY id DESC LIMIT 500"
-        )).mappings().all()
+            "FROM dsip_ufi_sms WHERE 1=1" + sms_frag + " ORDER BY id DESC LIMIT 500"
+        ), sms_p).mappings().all()
         call_rows = db.execute(text(
-            "SELECT imei, trace_id, dir, peer, answered, rejected, reject_code, duration_sec, "
-            "start_ts, end_ts, result, fail_reason, volte_log, sip_log, created_at "
-            "FROM dsip_ufi_call ORDER BY id DESC LIMIT 500"
-        )).mappings().all()
+            "SELECT c.imei, c.trace_id, c.dir, c.peer, c.answered, c.rejected, c.reject_code, c.duration_sec, "
+            "c.start_ts, c.end_ts, c.result, c.fail_reason, c.volte_log, c.sip_log, c.created_at "
+            "FROM dsip_ufi_call c WHERE 1=1" + call_frag + " ORDER BY c.id DESC LIMIT 500"
+        ), call_p).mappings().all()
         event_rows = db.execute(text(
-            "SELECT imei, msg_type, payload, created_at FROM dsip_ufi_event ORDER BY id DESC LIMIT 40"
-        )).mappings().all()
+            "SELECT imei, msg_type, payload, created_at FROM dsip_ufi_event WHERE 1=1" + ev_frag + " ORDER BY id DESC LIMIT 40"
+        ), ev_p).mappings().all()
         sms = []
         for row in sms_rows:
             item = dict(row)
@@ -2095,9 +2268,9 @@ def listUfiRecords():
         # 合并异常告警（心跳/SIP/VoLTE 掉线等），概览「实时事件流」一并可读展示
         try:
             alert_rows = db.execute(text(
-                "SELECT imei, kind, level, detail, created_at FROM dsip_ufi_alert "
+                "SELECT imei, kind, level, detail, created_at FROM dsip_ufi_alert WHERE 1=1" + ev_frag + " "
                 "ORDER BY id DESC LIMIT 40"
-            )).mappings().all()
+            ), ev_p).mappings().all()
             for ar in alert_rows:
                 events.append(_format_alert_event(ar))
         except Exception:
@@ -2170,7 +2343,11 @@ def listUfiCalls():
             "LEFT JOIN dsip_ufi_pool p ON p.imei = c.imei "
             "WHERE 1=1"
         )
+        from modules.api.acl import scoped_imei
         params = {}
+        frag, fp = scoped_imei('c')
+        sql += frag
+        params.update(fp)
         if imei:
             sql += " AND c.imei LIKE :imei"
             params['imei'] = '%' + imei + '%'
@@ -2378,10 +2555,15 @@ def listUfiFiles(imei=None):
             limit = min(max(int(request.args.get('limit') or 200), 1), 500)
         except (TypeError, ValueError):
             limit = 200
-        query = "SELECT id, imei, file_name, file_size, stored_path, created_at FROM dsip_ufi_file "
+        from modules.api.acl import scoped_imei
+        query = "SELECT id, imei, file_name, file_size, stored_path, created_at FROM dsip_ufi_file WHERE 1=1 "
         params = {'limit': limit}
+        frag, fp = scoped_imei('')
+        query += frag + " "
+        params.update(fp)
         if imei:
-            query += "WHERE imei = :imei "
+            _require_imei(db, imei)
+            query += "AND imei = :imei "
             params['imei'] = imei
         query += "ORDER BY id DESC LIMIT :limit"
         rows = db.execute(text(query), params).mappings().all()
@@ -2414,6 +2596,7 @@ def downloadUfiFile(file_id):
         ), {'id': file_id}).mappings().first()
         if row is None:
             raise http_exceptions.NotFound('UFI log file not found')
+        _require_imei(db, row['imei'])
         stored_path = str(row['stored_path'] or '')
         if not stored_path or not os.path.isfile(stored_path):
             raise http_exceptions.Gone('file content missing on server')
@@ -2436,6 +2619,13 @@ def downloadUfiFile(file_id):
 @api_security
 def getUfiCommandResult(imei, request_id):
     """Long-poll the reply of a previously dispatched command (device replies via WebSocket)."""
+    db = DummySession()
+    try:
+        db = startSession()
+        _ensure_ufi_tables(db)
+        _require_imei(db, imei)
+    finally:
+        db.close()
     try:
         wait = min(max(int(request.args.get('wait') or 25), 1), 30)
     except (TypeError, ValueError):

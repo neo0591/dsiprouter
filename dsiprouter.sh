@@ -137,8 +137,8 @@ function setStaticScriptSettings() {
     export DSIP_PORT=5000
     export RTP_PORT_MIN=10000
     export RTP_PORT_MAX=20000
-    export KAM_SIP_PORT=5060
-    export KAM_SIPS_PORT=5061
+    export KAM_SIP_PORT=10560
+    export KAM_SIPS_PORT=10561
     export KAM_DMQ_PORT=5090
     export KAM_WSS_PORT=7443
 

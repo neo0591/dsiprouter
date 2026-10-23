@@ -1,0 +1,156 @@
+classDiagram
+    %% ===== v4.1 定稿：MySQL 5.7 硬约束全部落实 =====
+    %% 1. 分区表每个唯一键必须含分区列 → PK(id, created_at)
+    %% 2. is_end 列（§10.2 闭组规则依赖）
+    %% 3. uk_hot 改 UNIQUE(hot_id, created_at)（§10.9 防 id 复用静默丢行）
+    %% 4. 全部热表/归档表按周分区 pYYYYMMW1..W5（§10.8）
+
+    class dsip_customer {
+        +INT id
+        +VARCHAR name
+        +VARCHAR code
+        +VARCHAR note
+        +TINYINT enabled
+        +DATETIME created
+        +DATETIME deleted_at  %% T-1 幂等 ALTER 新增，缺则登录 500
+        INDEX idx_deleted_at(deleted_at)
+    }
+
+    class dsip_ufi_device {
+        +BIGINT id
+        +VARCHAR imei
+        +INT customer_id
+        +TINYINT claim_status
+        UNIQUE(imei)
+        INDEX idx_cid(customer_id)
+    }
+
+    class dsip_ufi_device_owner_hist {
+        +BIGINT id
+        +VARCHAR imei
+        +INT from_cid
+        +INT to_cid
+        +DATETIME changed_at
+        +VARCHAR actor
+        INDEX idx_imei_time(imei, changed_at)
+    }
+
+    class dsip_ufi_import {
+        +BIGINT id
+        +VARCHAR imei
+        +VARCHAR sim
+        +INT customer_id
+        +TINYINT matched
+        +DATETIME matched_at
+        NOTE resolve_device_customer 只读它，禁止 FOR UPDATE
+    }
+
+    class dsip_ufi_call {
+        +BIGINT id
+        +VARCHAR imei
+        +INT customer_id  %% 写入时快照，历史不跟随设备
+        +TINYINT is_start
+        +TINYINT is_end  %% v4.1 新增，END 闭组
+        +VARCHAR trace_id  %% 仅审计，禁止用于归并
+        +VARCHAR dir
+        +VARCHAR peer
+        +INT duration_sec
+        +MEDIUMTEXT volte_log
+        +MEDIUMTEXT sip_log
+        +MEDIUMTEXT payload
+        +DATETIME created_at
+        PK(id, created_at)  %% 5.7 硬约束
+        INDEX idx_cid_time(customer_id, created_at, id)
+        INDEX idx_imei_id(imei, id)
+        PARTITION BY RANGE COLUMNS(created_at) pYYYYMMW1..W5
+    }
+
+    class dsip_ufi_sms {
+        +BIGINT id
+        +VARCHAR imei
+        +INT customer_id
+        +TEXT sms_body
+        +MEDIUMTEXT payload
+        +DATETIME created_at
+        PK(id, created_at)
+        INDEX idx_cid_time(customer_id, created_at, id)
+        PARTITION BY RANGE COLUMNS(created_at) pYYYYMMW1..W5
+    }
+
+    class dsip_ufi_call_summary {
+        +BIGINT id
+        +VARCHAR imei
+        +INT customer_id
+        +DATE window_day  %% v4.2: = DATE(start_ts) 业务日，不是 created_at
+        +DATETIME start_ts  %% 业务开始时间 = _ts_sec(startTs|ts)|created_at
+        +DATETIME end_ts
+        +DATETIME active_ts
+        +INT duration_sec
+        +INT frag_count
+        +BIGINT first_frag_id  %% 稳定键：尾部追加不变 → upsert 保 id
+        +BIGINT last_frag_id
+        +TINYINT is_end  %% 该组是否已收到 END（闭组）
+        +TINYINT state  %% 0=未定稿(可重建) 1=定稿
+        +TINYINT ts_src  %% v4.2 新增: 0=startTs 1=ts 2=created_at
+        +DATETIME retry_at
+        UNIQUE(imei, window_day, first_frag_id)  %% upsert 幂等键
+        INDEX idx_cid_time(customer_id, start_ts, id)  %% v4.2: 用 start_ts，非 created_at
+    }
+
+    class dsip_ufi_rollup_queue {
+        +VARCHAR imei
+        +DATE day
+        +TINYINT state
+        +DATETIME retry_at
+        UNIQUE(imei, day)
+    }
+
+    class dsip_ufi_call_archive {
+        +BIGINT aid
+        +BIGINT hot_id
+        +VARCHAR imei
+        +INT customer_id
+        +MEDIUMTEXT payload
+        +TINYINT source  %% 0=分区迁移 1=迟到直入
+        +TINYINT late  %% v4.2: 判据=目标 window_day 已归档（90 天降为 fallback）
+        +TINYINT need_review  %% 归档已有完整行又被补传 → 人工核对，不在热表造第二份
+        +DATETIME created_at  %% 随热表带过来，分区列
+        PK(aid, created_at)
+        UNIQUE(hot_id, created_at)  %% v4.1：防 5.7 id 复用被 IGNORE 静默吞
+        ROW_FORMAT=COMPRESSED
+        PARTITION BY RANGE COLUMNS(created_at) pYYYYMMW1..W5
+    }
+
+    class ListCursor {
+        +int v  %% 协议版本 = 1
+        +str src  %% "hot" | "sum"，与 UFI_LIST_SRC 不符 → 400
+        +int max  %% 页1定的快照上界 id
+        +int id  %% 上一页末行 id（严格 keyset）
+        +int ts  %% 排序时间戳 epoch 秒（v4.2：不存本地时间串，HA 时区漂移）
+        +int span  %% 本页窗宽，每页回落 base_span(6h)，只页内放大
+        +str wf  %% 冻结的绝对窗口起（页1解析后固定，不再解析 from）
+        +str wt  %% 冻结的绝对窗口止
+        +str f  %% md5(cid|imei|carrier|wf|wt|outcome|direction)，对解析归一化后的 wf/wt
+        +decode(s) ListCursor
+        +validate(src, filter) None  %% v/src/f 不符抛 400+refresh
+    }
+
+    class ListResponse {
+        +list calls
+        +int total
+        +bool totalApprox  %% true 时 pages 虚高，不可作终止依据
+        +bool has_more  %% 唯一权威终止信号
+        +int pages  %% 中间态
+        +str next_cursor
+    }
+
+    dsip_customer "1" o-- "*" dsip_ufi_device : soft_delete_enabled0_deleted_at
+    dsip_ufi_device "1" o-- "*" dsip_ufi_device_owner_hist : owner_audit
+    dsip_ufi_device "1" o-- "*" dsip_ufi_call : carrier_join_d_imei_and_cid
+    dsip_ufi_import "1" ..> "1" dsip_ufi_device : claim_backfill_null_only
+    dsip_ufi_call "1..*" ..> "1" dsip_ufi_call_summary : async_rollup_upsert_keep_id_plus_diff_delete
+    dsip_ufi_rollup_queue "1" ..> "*" dsip_ufi_call_summary : dirty_recompute_retry_at
+    dsip_ufi_call "0..*" ..> "0..*" dsip_ufi_call_archive : drop_partition_or_late_direct
+    ListCursor "1" ..> "1" dsip_ufi_call : phase_T3_hot
+    ListCursor "1" ..> "1" dsip_ufi_call_summary : phase_T5b_sum_filter_on_start_ts
+    ListResponse "1" o-- "*" dsip_ufi_call_summary : has_more_is_authority

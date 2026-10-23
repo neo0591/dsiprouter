@@ -13,6 +13,48 @@
   const num = n => (n == null ? '—' : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
   const pad2 = n => String(n).padStart(2, '0');
 
+  /* 列表/正文选区：拖选过程中或已选中文字时，暂停 3s 刷新，避免 DOM 重绘冲掉选区 */
+  let _ptrDown = null;
+  function hasTextSelection() {
+    try {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && /^(text|search|tel|url|password|email)$/i.test(ae.type || 'text')))) {
+        const a = ae.selectionStart, b = ae.selectionEnd;
+        if (a != null && b != null && a !== b) return true;
+      }
+      const s = window.getSelection && window.getSelection();
+      return !!(s && String(s).replace(/\s+/g, '').length);
+    } catch (e) { return false; }
+  }
+  function trackPtrDown(e) {
+    if (e.button !== 0) return;
+    _ptrDown = { x: e.clientX, y: e.clientY, t: Date.now() };
+  }
+  function clearPtrDown() { _ptrDown = null; }
+  function isSelectingText() {
+    if (hasTextSelection()) return true;
+    return !!_ptrDown; /* 鼠标尚未松开：可能正在拖选 */
+  }
+  function bindListCopyHelpers(root) {
+    const el = root || document.querySelector('.ufi-sms');
+    if (!el || el._copyBound) return;
+    el._copyBound = true;
+    el.addEventListener('mousedown', trackPtrDown, true);
+    document.addEventListener('mouseup', clearPtrDown, true);
+    document.addEventListener('pointerup', clearPtrDown, true);
+    el.addEventListener('dblclick', e => {
+      const cell = e.target.closest('.copyable, .mono, td.mono, .sms-body-cell, .alert-title, .sms-bubble-body');
+      if (!cell || cell.closest('button,a,input,select,label,textarea')) return;
+      const text = (cell.getAttribute('data-copy') || cell.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text || text === '—' || text.length < 2) return;
+      e.preventDefault();
+      const done = () => toast('已复制', text.length > 48 ? text.slice(0, 48) + '…' : text, 'ok', 1600);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(() => {});
+      }
+    });
+  }
+
   const SMS_TASK_STATE = {
     running:   { label: '发送中',   cls: 'ok' },
     scheduled: { label: '定时待发', cls: 'info' },
@@ -24,7 +66,7 @@
   };
   const SMS_WHEN = { now: '立即发送', at: '指定时间', daily: '每日', weekly: '每周' };
 
-  /** 号码池列表：按通道上的 pool 聚合（在池通道） */
+  /** 号码池列表：通道聚合 + 已创建但尚无成员的空池 */
   function listPools() {
     const map = {};
     (DB.channelList() || []).forEach(c => {
@@ -34,6 +76,10 @@
       map[p].all += 1;
       if (c.state === 'ok') map[p].ok += 1;
     });
+    (((DB.poolMembers && DB.poolMembers.pools) || [])).forEach(p => {
+      if (!p || map[p]) return;
+      map[p] = { id: p, all: 0, ok: 0 };
+    });
     return Object.keys(map).sort().map(k => map[k]);
   }
   function poolOptionsHtml(selected) {
@@ -42,12 +88,12 @@
     if (!sel && pools.length === 1) sel = pools[0].id;
     let html = '<option value="">— 请选择号码池 —</option>';
     if (!pools.length) {
-      html += '<option value="" disabled>暂无号码池（请到呼叫中心将 UFI 入池）</option>';
+      html += '<option value="" disabled>暂无号码池（可点「新建号码池」创建）</option>';
       return html;
     }
     html += pools.map(p =>
       '<option value="' + esc(p.id) + '"' + (sel === p.id ? ' selected' : '') + '>' +
-      esc(p.id) + '（可用 ' + p.ok + '/' + p.all + ' 路）</option>').join('');
+      esc(p.id) + (p.all ? ('（可用 ' + p.ok + '/' + p.all + ' 路）') : '（空池）') + '</option>').join('');
     return html;
   }
   const SMS_MSG_STATE = {
@@ -175,13 +221,10 @@
     s = s.replace(/[\s\-().]/g, '');
     if (s.indexOf('00') === 0 && /^00\d+$/.test(s)) s = '+' + s.slice(2);
 
-    // E.164：保留 +digits；仅 +86 大陆 11 位归一为本地号
+    // E.164：保留 +digits（含 +86，不剥国家码，跨国短信需要）
     if (s.charAt(0) === '+') {
       const digits = s.slice(1).replace(/\D/g, '');
       if (!digits || digits.length < 2 || digits.length > 15) return '';
-      if (digits.indexOf('86') === 0 && digits.length === 13 && digits.charAt(2) === '1') {
-        return digits.slice(2);
-      }
       return '+' + digits;
     }
 
@@ -190,11 +233,27 @@
       return /^[0-9A-Za-z+*#.\-]{2,64}$/.test(s) ? s : '';
     }
     let d = s.replace(/\D/g, '');
-    if (d.indexOf('086') === 0 && d.length === 14 && d.charAt(3) === '1') d = d.slice(3);
-    else if (d.indexOf('86') === 0 && d.length === 13 && d.charAt(2) === '1') d = d.slice(2);
+    // 无 + 的 86/086 中国国际号 → 升为 +86…（跨国 X-SMS 需要国家码）
+    if (d.indexOf('086') === 0 && d.length === 14 && d.charAt(3) === '1') return '+86' + d.slice(3);
+    if (d.indexOf('86') === 0 && d.length === 13 && d.charAt(2) === '1') return '+86' + d.slice(2);
     const m = d.match(/^1\d{10}$/);
     if (m) return m[0];
     return (d.length >= 2 && d.length <= 20) ? d : '';
+  }
+  function cnPhoneVariants(num) {
+    const a = normalizePhone(num);
+    if (!a) return [];
+    const out = [a];
+    if (a.charAt(0) === '+' && a.indexOf('+86') === 0 && a.length === 14 && /^1\d{10}$/.test(a.slice(3))) {
+      out.push(a.slice(3));
+    } else if (/^1\d{10}$/.test(a)) {
+      out.push('+86' + a);
+    }
+    return out;
+  }
+  function isCnBlack(num) {
+    const bs = DB.blackSet();
+    return cnPhoneVariants(num).some(n => bs.has(n));
   }
   function renderSmsBody(body, row) {
     return String(body || '').replace(/\{([^{}]+)\}/g, (m, k) => {
@@ -292,13 +351,22 @@
       err: rows.length ? '' : '未解析到有效号码（手机号 / 短号 / 短码 / +国际号）'
     };
   }
+  function extractBodyVars(body) {
+    return [...String(body || '').matchAll(/\{([^{}]+)\}/g)]
+      .map(m => String(m[1] || '').trim())
+      .filter(Boolean)
+      .filter((v, i, a) => a.indexOf(v) === i);
+  }
   function buildCampaignCsvTemplate(varNames) {
-    const vars = (varNames || []).map(v => String(v || '').trim()).filter(Boolean);
-    const headers = ['号码'].concat(vars.length ? vars : ['姓名', '订单号']);
+    // 严格按短信正文变量生成：无参数 → 仅「号码」列；有参数 → 号码 + 各变量列
+    const vars = (varNames || []).map(v => String(v || '').trim()).filter(Boolean)
+      .filter((v, i, a) => a.indexOf(v) === i);
+    const headers = ['号码'].concat(vars);
     const sampleVal = (h, row) => {
       if (PHONE_HDR.test(h) || h === '号码') return row === 0 ? '13800138000' : '13900139000';
       if (/名|name/i.test(h)) return row === 0 ? '张三' : '李四';
       if (/订单|order/i.test(h)) return row === 0 ? 'A20261001' : 'A20261002';
+      if (/电话|手机|mobile|tel/i.test(h)) return row === 0 ? '13900001111' : '13900002222';
       return '示例' + (row + 1);
     };
     const escapeCell = c => {
@@ -355,7 +423,7 @@
     const list = rows || [];
     const n = Math.min(limit || 5, list.length);
     if (!list.length) {
-      return '<div class="pv-empty">① 左侧选择短信模板或填写正文　　② 下载/导入 CSV　　③ 此处预览替换结果</div>';
+      return '<div class="pv-empty">① 左侧先填写短信正文（或选模板）　　② 再下载/导入收件人 CSV　　③ 此处预览替换结果</div>';
     }
     const bodyTrim = String(body || '').trim();
     if (!bodyTrim) {
@@ -457,6 +525,7 @@
   const VIEW_META = {
     compose:  ['发送短信', '真实 SIP MESSAGE → UFI → 运营商 · 敏感词与黑名单即时校验'],
     records:  ['短信记录', 'MT / MO 全量 · 状态日志 · 失败重发'],
+    alerts:   ['告警中心', '运营商欠费 / 余额不足自动识别 · 按手机卡处理'],
     campaign: ['群发短信', '立即 / 定时 / 每日 / 每周 · 匀速出队 · 静默顺延'],
     channels: ['通道与频控', 'UFI 池 = 短信线路通道 · 限速 / 冷却 / 夜间静默'],
     tpl:      ['短信模板', '通知 / 营销 / 验证码 · {变量} 占位'],
@@ -593,9 +662,8 @@
           '<button type="button" class="btn sm" id="cImportBtn"><span data-i="upload"></span>导入 CSV</button>' +
           '<button type="button" class="btn sm" id="cImportClear"' + (this.importRows.length ? '' : ' style="display:none"') + '>清除导入</button>' +
           '<input type="file" id="cImportFile" accept=".txt,.csv,text/plain,text/csv" style="display:none">' +
-          '<a href="/static/template/ufi_sms_campaign.csv" download="ufi_sms_campaign.csv" style="font-size:12px;color:var(--ac)">示例文件</a>' +
-          '<span style="color:var(--tx-3);font-size:12px">首列号码，其余列为 {变量}；也可粘贴纯号码</span></div>' +
-          '<textarea class="inp" id="cRcpts" rows="8" style="width:100%" placeholder="1xxxxxxxxxx&#10;1yyyyyyyyyy&#10;…&#10;或导入带参数的 CSV"></textarea>' +
+          '<span style="color:var(--tx-3);font-size:12px">须先写短信内容 → 下载模板（按 {变量} 生成列）→ 导入</span></div>' +
+          '<textarea class="inp" id="cRcpts" rows="8" style="width:100%" placeholder="先在上方填写短信内容，再下载 CSV 模板导入&#10;正文无变量时可粘贴纯号码"></textarea>' +
           '<div class="mxtag" id="cRcptsStat" style="margin-top:6px"></div>';
         if (this.importRows.length) {
           $('#cRcpts').value = this.importRows.map(r => r.phone).join('\n');
@@ -606,14 +674,27 @@
           if (!this.importRows.length) { this.statRcpts(); this.check(); }
         });
         $('#cTplDl').addEventListener('click', () => {
-          const t = DB.sms.tpl.find(x => x.id === +$('#composeTpl').value);
-          const fromTpl = t ? String(t.vars || '').split(',').map(x => x.trim()).filter(Boolean) : [];
-          const fromBody = (($('#composeBody') || {}).value || '').match(/\{([^{}]+)\}/g) || [];
-          const vars = [...new Set(fromTpl.concat(fromBody.map(m => m.slice(1, -1).trim())).filter(Boolean))];
+          const body = (($('#composeBody') || {}).value || '').trim();
+          if (!body) {
+            toast('请先填写短信内容', '导入模板按正文里的 {变量} 自动生成；无变量则只有号码列', 'warn', 3600);
+            try { $('#composeBody').focus(); } catch (e) { /* ignore */ }
+            return;
+          }
+          const vars = extractBodyVars(body);
           downloadText('群发导入模板.csv', buildCampaignCsvTemplate(vars));
-          toast('模板已下载', '填写后点「导入 CSV」，预览将自动生成', 'ok', 2800);
+          toast('模板已下载', vars.length
+            ? ('列：号码、' + vars.join('、') + ' · 填写后导入')
+            : '正文无变量，模板仅含「号码」列', 'ok', 3200);
         });
-        $('#cImportBtn').addEventListener('click', () => $('#cImportFile').click());
+        $('#cImportBtn').addEventListener('click', () => {
+          const body = (($('#composeBody') || {}).value || '').trim();
+          if (!body) {
+            toast('请先填写短信内容', '确定正文与 {变量} 后再导入收件人', 'warn', 3600);
+            try { $('#composeBody').focus(); } catch (e) { /* ignore */ }
+            return;
+          }
+          $('#cImportFile').click();
+        });
         $('#cImportClear').addEventListener('click', () => {
           this.importRows = [];
           $('#cRcpts').value = '';
@@ -632,8 +713,8 @@
             const text = await readCsvFile(f);
             const parsed = parseCampaignCsv(text);
             if (parsed.err) { toast('导入失败', parsed.err, 'err'); return; }
-            const black = parsed.rows.filter(r => DB.isBlack(r.phone)).map(r => r.phone);
-            this.importRows = parsed.rows.filter(r => !DB.isBlack(r.phone));
+            const black = parsed.rows.filter(r => isCnBlack(r.phone)).map(r => r.phone);
+            this.importRows = parsed.rows.filter(r => !isCnBlack(r.phone));
             const box = $('#cRcpts');
             box.value = this.importRows.map(r => r.phone).join('\n');
             box.readOnly = true;
@@ -705,10 +786,9 @@
     },
     parseRcpts() {
       if (APP.mode === 'bulk' && this.importRows.length) {
-        const bs = DB.blackSet();
         let black = 0;
         const clean = this.importRows.filter(r => {
-          if (bs.has(r.phone)) { black++; return false; }
+          if (isCnBlack(r.phone)) { black++; return false; }
           return true;
         });
         return { raw: this.importRows.length, valid: clean.length, dup: 0, black: black, nums: clean.map(r => r.phone), rows: clean };
@@ -727,12 +807,11 @@
         }
       }
       const set = new Set();
-      const bs = DB.blackSet();
       let dup = 0, black = 0;
       const clean = list.filter(p => {
         if (set.has(p)) { dup++; return false; }
         set.add(p);
-        if (/^1\d{10}$/.test(p) && bs.has(p)) { black++; return false; }
+        if (isCnBlack(p)) { black++; return false; }
         return true;
       });
       return { raw: list.length, valid: clean.length, dup: dup, black: black, nums: clean, rows: clean.map(p => ({ phone: p })) };
@@ -818,7 +897,7 @@
       if (APP.mode === 'single') {
         const peer = normalizePhone($('#cPeer').value || '');
         if (!peer) { toast('号码无效', '支持手机号、短号（如 10086）或字母数字短码', 'err'); return; }
-        if (/^1\d{10}$/.test(peer) && DB.isBlack(peer)) { toast('黑名单号码', peer + ' 拒绝发送（可在黑名单模块移除）', 'err'); return; }
+        if (isCnBlack(peer)) { toast('黑名单号码', peer + ' 拒绝发送（可在黑名单模块移除）', 'err'); return; }
         const btn = $('#composeSend');
         btn.disabled = true;
         try {
@@ -980,7 +1059,7 @@
           '<td>' + dirCellHtml(m.dir) + '</td>' +
           '<td class="sms-num-cell sms-num-cell--peer">' +
             '<span class="sms-num-row"><span class="mono">' + esc(m.peer) + '</span>' + peerCc + '</span></td>' +
-          '<td class="sms-body-cell" title="' + esc(m.body) + '">' + esc(m.body) + '</td>' +
+          '<td class="sms-body-cell copyable" data-copy="' + esc(m.body) + '" title="' + esc(m.body) + '（双击复制）">' + esc(m.body) + '</td>' +
           '<td class="sms-state-cell"><span class="tag ' + st.cls + '">' + st.label + '</span>' + (m.err ? '<div class="mxtag" style="color:var(--st-err)">' + esc(m.err) + '</div>' : '') + '</td>' +
           '<td class="col-act"><div class="rowbtns rowbtns--center">' + ops.map(o =>
             '<button class="btn xs ' + o[2] + '" data-msact="' + o[0] + '"' + dataAttrs + '>' + o[1] + '</button>').join('') + '</div></td></tr>';
@@ -1091,7 +1170,7 @@
             '自动刷新'
           ];
           if (last && last.sim) parts.push('通道 ' + last.sim);
-          if (/^1\d{10}$/.test(peer) && DB.isBlack(peer)) parts.push('黑名单');
+          if (isCnBlack(peer)) parts.push('黑名单');
           if (extra) parts.push(extra);
           meta.textContent = parts.join(' · ');
         };
@@ -1152,7 +1231,7 @@
         const sendNow = async () => {
           const body = (($('#chatBody') || {}).value || '').trim();
           if (!body) { toast('内容为空', '请输入短信', 'warn'); return; }
-          if (/^1\d{10}$/.test(peer) && DB.isBlack(peer)) { toast('黑名单号码', peer + ' 拒绝发送', 'err'); return; }
+          if (isCnBlack(peer)) { toast('黑名单号码', peer + ' 拒绝发送', 'err'); return; }
           const hits = DB.checkWords(body);
           if (hits.length) { toast('命中敏感词', '「' + hits.join('、') + '」', 'err'); return; }
           const btn = $('#chatSend');
@@ -1373,6 +1452,8 @@
         if (!el) return;
         el.innerHTML = campaignPreviewHtml(($('#tBody') || {}).value || '', importRows, 5);
       };
+      const currentVars = () => extractBodyVars((($('#tBody') || {}).value || ''));
+      const bodyReady = () => !!((($('#tBody') || {}).value || '').trim());
       const renderVarChips = () => {
         const box = $('#tVarChips');
         if (!box) return;
@@ -1381,10 +1462,11 @@
         const all = [...new Set(vars.concat(fromCsv))];
         box.innerHTML = all.length
           ? all.map(v => '<button type="button" class="var-chip" data-var="' + esc(v) + '">{' + esc(v) + '}</button>').join('')
-          : '<span class="mxtag" style="margin:0">选择模板或导入 CSV 后可点此插入变量</span>';
+          : '<span class="mxtag" style="margin:0">在正文中写 {' + '变量名}，导入模板会自动带上该列</span>';
         $$('#tVarChips [data-var]').forEach(b => b.addEventListener('click', () => {
           const ta = $('#tBody');
           ta.value = (ta.value || '') + '{' + b.dataset.var + '}';
+          syncImportGate();
           refreshPreview();
         }));
       };
@@ -1392,8 +1474,7 @@
         if (!t) return;
         $('#tTpl').value = String(t.id);
         $('#tBody').value = t.body || '';
-        renderVarChips();
-        refreshPreview();
+        syncImportGate();
         if (!silent) toast('已应用模板', t.name, 'ok', 2200);
       };
       let importMeta = { black: [], dup: [], bad: [], file_n: 0 };
@@ -1405,15 +1486,24 @@
           box.readOnly = true;
           box.style.background = 'var(--bg-2)';
         } else {
-          box.readOnly = false;
-          box.style.background = '';
+          box.readOnly = !bodyReady();
+          box.style.background = bodyReady() ? '' : 'var(--bg-2)';
         }
         const st = $('#tRcptsStat');
         if (st) {
+          const vars = currentVars();
           const cols = importRows.length ? Object.keys(importRows[0]).filter(k => k !== 'phone') : [];
-          let html = importRows.length
-            ? ('已导入 <b>' + importRows.length + '</b> 人' + (cols.length ? ' · 参数列：' + cols.map(esc).join('、') : '（仅号码）'))
-            : '可粘贴号码，或下载模板填写参数后导入';
+          let html;
+          if (importRows.length) {
+            html = '已导入 <b>' + importRows.length + '</b> 人' +
+              (cols.length ? ' · 参数列：' + cols.map(esc).join('、') : '（仅号码）');
+          } else if (!bodyReady()) {
+            html = '请先在左侧填写短信正文，再下载/导入收件人 CSV';
+          } else if (vars.length) {
+            html = '正文含变量 <b>' + vars.map(esc).join('、') + '</b> · 请下载 CSV 填写后导入';
+          } else {
+            html = '正文无变量 · 可下载仅含「号码」的 CSV，或直接粘贴号码';
+          }
           if (importMeta.black.length) {
             html += '<br><span style="color:var(--st-err)">黑名单已跳过 <b>' + importMeta.black.length + '</b> 个：' +
               importMeta.black.map(esc).join('、') + '（可到「黑名单」移除后再导入）</span>';
@@ -1426,11 +1516,32 @@
         renderVarChips();
         refreshPreview();
       };
-      const currentVars = () => {
-        const t = DB.sms.tpl.find(x => String(x.id) === String(($('#tTpl') || {}).value || ''));
-        const fromTpl = tplVarList(t);
-        const fromBody = (($('#tBody') || {}).value || '').match(/\{([^{}]+)\}/g) || [];
-        return [...new Set(fromTpl.concat(fromBody.map(m => m.slice(1, -1).trim())).filter(Boolean))];
+      const syncImportGate = () => {
+        const ready = bodyReady();
+        const vars = currentVars();
+        const dl = $('#tTplDl');
+        const btn = $('#tImportBtn');
+        if (dl) {
+          dl.disabled = !ready;
+          dl.title = ready
+            ? (vars.length ? '按正文变量生成：号码、' + vars.join('、') : '正文无变量，模板仅含号码列')
+            : '请先填写短信内容';
+        }
+        if (btn) {
+          btn.disabled = !ready;
+          btn.title = ready ? '导入按正文生成的 CSV' : '请先填写短信内容';
+        }
+        const box = $('#tRcpts');
+        if (box && !importRows.length) {
+          box.readOnly = !ready;
+          box.style.background = ready ? '' : 'var(--bg-2)';
+          box.placeholder = ready
+            ? (vars.length
+              ? '正文含 {' + vars.join('}、{') + '}，请下载 CSV 填写参数后导入'
+              : '每行一个号码，或逗号 / 空格分隔；也可下载仅含「号码」的 CSV 导入')
+            : '请先在左侧填写短信正文，再下载/导入收件人';
+        }
+        syncRcptsBox();
       };
       Modal.open('新建群发任务',
         '<div class="task-form">' +
@@ -1471,7 +1582,7 @@
                 tpl.map(t => '<option value="' + t.id + '">' + esc(t.name) + '（' + esc(t.type) + '）</option>').join('') +
                 '</select></div>' +
               '<div><label class="mxtag">正文（支持 {变量}）</label>' +
-                '<textarea class="inp task-body" id="tBody" rows="5" placeholder="先选上方短信模板，或手写：您好{姓名}，订单{订单号}已发货"></textarea>' +
+                '<textarea class="inp task-body" id="tBody" rows="5" placeholder="先填写正文，再导入收件人。有变量示例：您的订单{订单号}已发货"></textarea>' +
                 '<div class="task-varchips" id="tVarChips"></div></div>' +
             '</section>' +
           '</div>' +
@@ -1480,15 +1591,14 @@
               '<div class="task-sec-hd">' +
                 '<h4 class="task-sec-title">收件人</h4>' +
                 '<div class="task-sec-acts">' +
-                  '<button type="button" class="btn sm" id="tTplDl"><span data-i="download"></span>下载 CSV</button>' +
-                  '<button type="button" class="btn sm primary" id="tImportBtn"><span data-i="upload"></span>导入 CSV</button>' +
+                  '<button type="button" class="btn sm" id="tTplDl" disabled title="请先填写短信内容"><span data-i="download"></span>下载 CSV</button>' +
+                  '<button type="button" class="btn sm primary" id="tImportBtn" disabled title="请先填写短信内容"><span data-i="upload"></span>导入 CSV</button>' +
                   '<button type="button" class="btn sm" id="tImportClear" style="display:none">清除</button>' +
                   '<input type="file" id="tImportFile" accept=".csv,.txt,text/csv,text/plain" style="display:none">' +
-                  '<a class="hint" href="/static/template/ufi_sms_campaign.csv" download="ufi_sms_campaign.csv">示例</a>' +
                 '</div>' +
               '</div>' +
-              '<textarea class="inp task-rcpts" id="tRcpts" rows="6" placeholder="每行一个号码，或逗号 / 空格分隔&#10;建议：先选左侧短信模板 → 下载 CSV → 填写后导入"></textarea>' +
-              '<div class="task-stat" id="tRcptsStat">建议先选左侧「测试模板」，再下载/导入 CSV</div>' +
+              '<textarea class="inp task-rcpts" id="tRcpts" rows="6" readonly placeholder="请先在左侧填写短信正文，再下载/导入收件人"></textarea>' +
+              '<div class="task-stat" id="tRcptsStat">请先在左侧填写短信正文，再下载/导入收件人 CSV</div>' +
               '<div class="task-preview" id="tPreview"></div>' +
             '</section>' +
           '</div>' +
@@ -1535,51 +1645,64 @@
       };
       syncWhenUI();
       $('#tWhen').addEventListener('change', syncWhenUI);
-      renderVarChips();
-      refreshPreview();
-      // 仅有一个短信模板时默认选中，避免忘记选模板导致预览空白
+      syncImportGate();
+      // 仅有一个短信模板时默认选中，便于带出正文后再导入
       if (tpl.length === 1) applyTpl(tpl[0], true);
       $('#tTpl').addEventListener('change', e => {
         const t = DB.sms.tpl.find(x => String(x.id) === String(e.target.value));
         if (t) applyTpl(t, true);
-        else { renderVarChips(); refreshPreview(); }
+        else { syncImportGate(); }
       });
-      $('#tBody').addEventListener('input', () => { renderVarChips(); refreshPreview(); });
+      $('#tBody').addEventListener('input', () => { syncImportGate(); });
       $('#tTplDl').addEventListener('click', () => {
-        let vars = currentVars();
-        let tip = '填写号码与参数列后点「导入 CSV」';
-        if (!vars.length) {
-          const t = matchTplByCols([]) || (tpl.length ? tpl[0] : null);
-          if (t) {
-            applyTpl(t, true);
-            vars = tplVarList(t);
-            tip = '已按「' + t.name + '」生成列：' + vars.join('、');
-          }
+        if (!bodyReady()) {
+          toast('请先填写短信内容', '导入模板按正文里的 {变量} 自动生成；无变量则只有号码列', 'warn', 3600);
+          try { $('#tBody').focus(); } catch (e) { /* ignore */ }
+          return;
         }
+        const vars = currentVars();
         downloadText('群发导入模板.csv', buildCampaignCsvTemplate(vars));
-        toast('CSV 已下载', tip, 'ok', 3200);
+        toast('CSV 已下载', vars.length
+          ? ('列：号码、' + vars.join('、') + ' · 填写后导入')
+          : '正文无变量，模板仅含「号码」列', 'ok', 3200);
       });
-      $('#tImportBtn').addEventListener('click', () => $('#tImportFile').click());
+      $('#tImportBtn').addEventListener('click', () => {
+        if (!bodyReady()) {
+          toast('请先填写短信内容', '确定正文与 {变量} 后再导入收件人', 'warn', 3600);
+          try { $('#tBody').focus(); } catch (e) { /* ignore */ }
+          return;
+        }
+        $('#tImportFile').click();
+      });
       $('#tImportClear').addEventListener('click', () => {
         importRows = [];
         importMeta = { black: [], dup: [], bad: [], file_n: 0 };
         $('#tImportClear').style.display = 'none';
-        syncRcptsBox();
+        syncImportGate();
         toast('已清除导入', '可重新粘贴号码或导入文件', 'info', 2000);
       });
       $('#tImportFile').addEventListener('change', async e => {
         const f = e.target.files && e.target.files[0];
         e.target.value = '';
         if (!f) return;
+        if (!bodyReady()) {
+          toast('请先填写短信内容', '导入模板列由正文 {变量} 决定', 'warn', 3600);
+          return;
+        }
         try {
           if (!DB.blacklist.length) { try { await DB.loadBlack(); } catch (ex) { /* ignore */ } }
           const text = await readCsvFile(f);
           const parsed = parseCampaignCsv(text);
           if (parsed.err) { toast('导入失败', parsed.err, 'err'); return; }
-          const bs = DB.blackSet();
+          const needVars = currentVars();
+          const missing = needVars.filter(v => !(parsed.cols || []).includes(v));
+          if (missing.length) {
+            toast('CSV 缺少参数列', '正文需要：' + missing.join('、') + ' · 请重新下载模板填写', 'err', 5200);
+            return;
+          }
           const black = [], kept = [];
           parsed.rows.forEach(r => {
-            if (bs.has(r.phone)) black.push(r.phone);
+            if (isCnBlack(r.phone)) black.push(r.phone);
             else kept.push(r);
           });
           importMeta = {
@@ -1590,22 +1713,16 @@
           };
           importRows = kept;
           $('#tImportClear').style.display = importRows.length ? '' : 'none';
-          const matched = matchTplByCols(parsed.cols);
-          const bodyEmpty = !(($('#tBody') || {}).value || '').trim();
-          if (matched && (bodyEmpty || String(($('#tTpl') || {}).value || '') === '')) {
-            applyTpl(matched, true);
-          }
-          syncRcptsBox();
-          const bodyNow = (($('#tBody') || {}).value || '').trim();
+          syncImportGate();
           if (!importRows.length && black.length) {
             toast('全部命中黑名单', black.join('、') + ' — 请到「黑名单」移除后再导入', 'err', 5600);
             return;
           }
           toast(
             '文件 ' + importMeta.file_n + ' 个号码 → 导入 ' + importRows.length + ' 人',
-            (parsed.cols.length ? '参数：' + parsed.cols.join('、') + ' · ' : '') +
+            (needVars.length ? '参数：' + needVars.join('、') + ' · ' : '仅号码 · ') +
             (black.length ? '黑名单跳过 ' + black.length + '：' + black.join('、') + ' · ' : '') +
-            (matched && bodyNow ? '已套用「' + matched.name + '」' : (bodyNow ? '预览已更新' : '请选择短信模板')),
+            '预览已更新',
             black.length ? 'warn' : 'ok', 5600
           );
         } catch (ex) { toast('导入失败', errText(ex), 'err'); }
@@ -1616,17 +1733,29 @@
         const hits = DB.checkWords(body);
         if (hits.length) { toast('命中敏感词', '「' + hits.join('、') + '」，请修改内容', 'err'); return false; }
         if (!name) { toast('缺少任务名', '', 'err'); return false; }
-        if (!body) { toast('缺少短信内容', '请先选择左侧短信模板或填写正文', 'err'); return false; }
+        if (!body) { toast('缺少短信内容', '请先填写正文，再导入收件人', 'err'); return false; }
         const poolId = (($('#tPool') || {}).value || '').trim();
         if (!poolId) { toast('请选择号码池', '群发必须指定发送号码池', 'err'); return false; }
+        const needVars = extractBodyVars(body);
         let rcpts = importRows.slice();
         if (!rcpts.length) {
+          if (needVars.length) {
+            toast('请导入带参数的 CSV', '正文含 {' + needVars.join('}、{') + '}，请下载模板填写后导入', 'err', 4200);
+            return false;
+          }
           const rawRcpt = ($('#tRcpts').value || '');
           const nums = [...new Set(rawRcpt.split(/[\s,;|/\n\r]+/).map(normalizePhone).filter(Boolean))];
-          const bs = DB.blackSet();
-          rcpts = nums.filter(p => !(/^1\d{10}$/.test(p) && bs.has(p))).map(p => ({ phone: p }));
+          rcpts = nums.filter(p => !isCnBlack(p)).map(p => ({ phone: p }));
         }
         if (!rcpts.length) { toast('收件人为空', '请粘贴号码或导入 CSV', 'err'); return false; }
+        if (needVars.length) {
+          const missRow = rcpts.find(r => needVars.some(v => !(r[v] || '').toString().trim()));
+          if (missRow) {
+            toast('收件人缺少参数', '号码 ' + missRow.phone + ' 缺少：' +
+              needVars.filter(v => !(missRow[v] || '').toString().trim()).join('、'), 'err', 4200);
+            return false;
+          }
+        }
         const when = ($('#tWhen') || {}).value || 'now';
         const whenVal = (($('#tWhenVal') || {}).value || '').trim();
         if (when === 'at' && !whenVal) { toast('请选择执行时间', '', 'err'); return false; }
@@ -1666,10 +1795,27 @@
     poolQ: '',
     init() {
       $('#chPane').addEventListener('click', e => {
+        const gClose = e.target.closest('[data-chguide-close]');
+        if (gClose) {
+          try { localStorage.setItem('ufi_sms_ch_guide', 'off'); } catch (_) {}
+          const g = $('#chGuide');
+          if (g) g.remove();
+          return;
+        }
+        const jump = e.target.closest('[data-chjump]');
+        if (jump) {
+          const t = document.querySelector(jump.dataset.chjump);
+          if (t) {
+            if (t.tagName === 'DETAILS') t.open = true;
+            t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          return;
+        }
         const join = e.target.closest('[data-pooljoin]');
         if (join) this.joinPool(join.dataset.pooljoin, join.dataset.sim, join.dataset.pool);
         if (e.target.id === 'btnPoolJoin') this.joinPool('', '', 'sim-pool');
         if (e.target.id === 'btnPoolBatch') this.batchSetPool();
+        if (e.target.id === 'btnPoolNew') this.poolNew();
         if (e.target.id === 'poolMemQApply') {
           this.poolQ = (($('#poolMemQ') && $('#poolMemQ').value) || '').trim();
           PG.st.poolmem = PG.st.poolmem || { page: 1, size: 15 };
@@ -1805,40 +1951,30 @@
         '<td class="col-act"><div class="rowbtns"><button class="btn xs" data-polact="edit" data-polid="' + p.id + '">编辑</button>' +
         '<button class="btn xs" data-polact="del" data-polid="' + p.id + '">删除</button></div></td></tr>').join('')
         : '<tr><td colspan="7" style="text-align:center;color:var(--tx-3);padding:18px">暂无策略。可在发送 / 群发时选择不同策略；未选则按下方默认设置执行。</td></tr>';
-      $('#chPane').innerHTML =
-        '<div class="panel"><div class="panel-head"><h3><span data-i="layers"></span>发送策略（多套 · 发送时选择）</h3>' +
-          '<button class="btn sm primary" data-polact="new">＋ 新增策略</button></div>' +
-          '<div class="panel-body flush"><div class="tablewrap"><table class="grid"><thead><tr>' +
-          '<th>策略名</th><th>通道选路</th><th>速率</th><th>时 / 日上限</th><th>同通道间隔</th><th>夜间静默</th><th>操作</th>' +
-          '</tr></thead><tbody>' + polRows + '</tbody></table></div></div></div>' +
-        '<div class="grid2">' +
-        '<div class="panel"><div class="panel-head"><h3><span data-i="sliders"></span>默认设置与频控</h3>' +
-          '<span class="hint">发送时未选策略则按此执行（改后即时生效）</span></div><div class="panel-body">' +
-          '<div class="strat-grid">' + strat.map(x =>
-            '<div class="strat' + (x.on ? ' on' : '') + '" data-sstrat="' + x.id + '"><b>' + x.name + '</b>' +
-            '<span>' + x.desc + '</span>' + (x.on ? '<span class="tag ok">当前</span>' : '') + '</div>').join('') + '</div>' +
-          '<dl class="spec" style="margin-top:14px">' +
-            '<dt>单通道时上限</dt><dd><input class="inp" type="number" min="1" style="width:90px" value="' + (s.per_hour || 40) + '" data-sparam="per_hour"> 条/时</dd>' +
-            '<dt>单通道日上限</dt><dd><input class="inp" type="number" min="1" style="width:90px" value="' + (s.per_day || 400) + '" data-sparam="per_day"> 条/日</dd>' +
-            '<dt>同通道最小间隔</dt><dd><input class="inp" type="number" min="1" style="width:90px" value="' + (s.gap_s || 6) + '" data-sparam="gap_s"> 秒</dd>' +
-            '<dt>夜间静默</dt><dd>' + (s.quiet_from || '23:00') + ' → 次日 ' + (s.quiet_to || '08:00') +
-              (DB.quietNow() ? ' <span class="tag warn">静默中</span>' : ' <span class="tag ok">放行中</span>') + '</dd>' +
-            '<dt>短信签名（前缀）</dt><dd><input class="inp" style="width:170px" value="' + esc(s.sig || '') + '" data-sparam="sig" placeholder="【公司名】"> <span style="color:var(--tx-3);font-size:12px">开启签名时自动拼在正文前</span></dd>' +
-          '</dl>' +
-        '</div></div>' +
-        '<div class="panel"><div class="panel-head"><h3><span data-i="antenna"></span>通道口径</h3><span class="hint">短信能力与通话同门槛</span></div><div class="panel-body">' +
-          '<dl class="spec">' +
-            '<dt>通道来源</dt><dd>UFI 台账：已注册 + SIM 就绪（后端实时派生）</dd>' +
-            '<dt>发送方言</dt><dd>MESSAGE · R-URI=IMEI · X-SMS=收件号码（X-VOLTE=身份）</dd>' +
-            '<dt>上行回传</dt><dd>UFI → MESSAGE → Kamailio 落库（SMS_RELAY）</dd>' +
-            '<dt>通道确认</dt><dd>UFI 回 200 OK = 已接收；超时 / 4xx 记失败</dd>' +
-            '<dt>运营商风险</dt><dd>高频单卡群发会被拦截 / 空放，务必限速</dd>' +
-          '</dl>' +
-          '<div class="note warn" style="margin-top:12px"><span class="ni">' + I('alert', 15) + '</span><div class="nb"><b>合规提醒</b>营销短信须含签名与退订方式；夜间静默期内营销类拒绝单发、群发自动顺延。</div></div>' +
-        '</div></div>' +
-        '</div>' +
-        '<div class="panel"><div class="panel-head"><h3><span data-i="pool"></span>号码池成员（短信选路）</h3>' +
-          '<span class="hint">群发 / 策略只从已入池且 VoIP 已注册的设备里选通道</span></div>' +
+
+      /* ---- 快速上手引导条（可关闭，localStorage 记忆） ---- */
+      let guideClosed = false;
+      try { guideClosed = localStorage.getItem('ufi_sms_ch_guide') === 'off'; } catch (_) {}
+      const guide = guideClosed ? '' :
+        '<div class="chx-guide" id="chGuide">' +
+          '<div class="chx-guide-hd"><b>第一次用？按这三步就能发短信</b>' +
+            '<button class="btn xs" type="button" data-chguide-close>知道了，不再显示</button></div>' +
+          '<div class="chx-steps">' +
+            '<button type="button" class="chx-step" data-chjump="#ch-pool"><span class="n">1</span><span class="t"><b>选好发信设备</b><small>把 SIM 设备加入号码池，只有入池且在线的设备才会用来发</small></span></button>' +
+            '<button type="button" class="chx-step" data-chjump="#ch-list"><span class="n">2</span><span class="t"><b>确认通道可用</b><small>查看每张卡的信号 / 限速余量 / 状态，异常卡可停用</small></span></button>' +
+            '<button type="button" class="chx-step" data-chjump="#ch-strategy"><span class="n">3</span><span class="t"><b>按需调发送节奏</b><small>限速、时段上限、夜间静默，默认值已可用，一般不用改</small></span></button>' +
+          '</div>' +
+          '<div class="chx-diag" id="chGuideDiag"></div>' +
+        '</div>';
+
+      $('#chPane').innerHTML = guide +
+        /* ── 1. 可用通道（客户最常看） ── */
+        '<div class="panel" id="ch-list"><div class="panel-head"><h3><span data-i="antenna"></span>可用通道（按运营商分组 · ' + num((DB.ov.channels || []).length) + ' 路）</h3>' +
+          '<span class="hint">一张 SIM 卡 = 一条通道；绿色=可发，灰=未启用，黄=冷却中</span></div>' +
+          '<div class="panel-body" id="chBody" style="padding:14px 16px"></div></div>' +
+        /* ── 2. 号码池成员 ── */
+        '<div class="panel" id="ch-pool"><div class="panel-head"><h3><span data-i="pool"></span>发信设备（号码池）</h3>' +
+          '<span class="hint">勾选后「批量设置号码池」；群发只从池内在线设备里选卡发送</span></div>' +
           '<div class="toolbar" style="flex-wrap:wrap;gap:8px">' +
             '<div class="searchbox grow"><span data-i="search"></span>' +
               '<input class="inp" id="poolMemQ" autocomplete="off" placeholder="IMEI / SN / SIM / 池名，回车过滤" value="' + esc(this.poolQ || '') + '">' +
@@ -1846,6 +1982,7 @@
             '<button class="btn sm" type="button" id="poolMemQApply">查询</button>' +
             '<button class="btn sm" type="button" id="poolMemQReset">重置</button>' +
             '<button class="btn sm primary" type="button" id="btnPoolBatch" disabled>批量设置号码池</button>' +
+            '<button class="btn sm" type="button" id="btnPoolNew">＋ 新建号码池</button>' +
             '<button class="btn sm primary" type="button" id="btnPoolJoin">加入号码池</button>' +
             '<span class="tb-count" id="poolMemSelCount"></span>' +
           '</div>' +
@@ -1854,12 +1991,67 @@
           '<th>IMEI</th><th>SN</th><th>SIM</th><th>号码池</th><th>VoIP</th><th class="col-act">操作</th>' +
           '</tr></thead><tbody id="poolMemBody"><tr><td colspan="7">加载中…</td></tr></tbody></table></div>' +
           '<div class="pager-bar" id="pgPoolMem"></div></div></div>' +
-        '<div class="panel"><div class="panel-head"><h3><span data-i="pool"></span>短信通道（按运营商分组 · ' + num((DB.ov.channels || []).length) + ' 路）</h3>' +
-          '<span class="hint">每个运营商可配置上行推送与状态报告地址</span></div>' +
-          '<div class="panel-body" id="chBody" style="padding:14px 16px"></div></div>';
+        /* ── 3. 发送节奏（进阶 · 默认折叠） ── */
+        '<details class="chx-fold" id="ch-strategy"><summary><span data-i="sliders"></span><b>发送节奏与限速（进阶）</b>' +
+          '<span class="hint">当前策略：' + esc(STRATEGY_NAME[s.strategy || 'wrr'] || '加权轮询') + ' · 单通道 ' + (s.per_hour || 40) + ' 条/时 · ' + (s.per_day || 400) + ' 条/日' + (DB.quietNow() ? ' · ⚠️ 夜间静默中' : '') + '</span></summary>' +
+          '<div class="chx-fold-bd">' +
+          '<p class="chx-plain">不配置也能正常发短信（走下方默认值）。需要<strong>多任务不同节奏</strong>时才建策略，发送 / 群发时选一下即可。</p>' +
+          '<div class="panel"><div class="panel-head"><h3><span data-i="layers"></span>发送策略（多套 · 发送时选择）</h3>' +
+            '<button class="btn sm primary" data-polact="new">＋ 新增策略</button></div>' +
+            '<div class="panel-body flush"><div class="tablewrap"><table class="grid"><thead><tr>' +
+            '<th>策略名</th><th>通道选路</th><th>速率</th><th>时 / 日上限</th><th>同通道间隔</th><th>夜间静默</th><th>操作</th>' +
+            '</tr></thead><tbody>' + polRows + '</tbody></table></div></div></div>' +
+          '<div class="grid2">' +
+          '<div class="panel"><div class="panel-head"><h3><span data-i="sliders"></span>默认设置与频控</h3>' +
+            '<span class="hint">发送时未选策略则按此执行（改后即时生效）</span></div><div class="panel-body">' +
+            '<div class="strat-grid">' + strat.map(x =>
+              '<div class="strat' + (x.on ? ' on' : '') + '" data-sstrat="' + x.id + '"><b>' + x.name + '</b>' +
+              '<span>' + x.desc + '</span>' + (x.on ? '<span class="tag ok">当前</span>' : '') + '</div>').join('') + '</div>' +
+            '<dl class="spec" style="margin-top:14px">' +
+              '<dt>单通道时上限</dt><dd><input class="inp" type="number" min="1" style="width:90px" value="' + (s.per_hour || 40) + '" data-sparam="per_hour"> 条/时</dd>' +
+              '<dt>单通道日上限</dt><dd><input class="inp" type="number" min="1" style="width:90px" value="' + (s.per_day || 400) + '" data-sparam="per_day"> 条/日</dd>' +
+              '<dt>同通道最小间隔</dt><dd><input class="inp" type="number" min="1" style="width:90px" value="' + (s.gap_s || 6) + '" data-sparam="gap_s"> 秒</dd>' +
+              '<dt>夜间静默</dt><dd>' + (s.quiet_from || '23:00') + ' → 次日 ' + (s.quiet_to || '08:00') +
+                (DB.quietNow() ? ' <span class="tag warn">静默中</span>' : ' <span class="tag ok">放行中</span>') + '</dd>' +
+              '<dt>短信签名（前缀）</dt><dd><input class="inp" style="width:170px" value="' + esc(s.sig || '') + '" data-sparam="sig" placeholder="【公司名】"> <span style="color:var(--tx-3);font-size:12px">开启签名时自动拼在正文前</span></dd>' +
+            '</dl>' +
+          '</div></div>' +
+          '</div></div></details>' +
+        /* ── 4. 技术说明（了解即可 · 默认折叠） ── */
+        '<details class="chx-fold" id="ch-tech"><summary><span data-i="info"></span><b>通道是怎么工作的（技术说明）</b>' +
+          '<span class="hint">短信能力与通话同门槛 · 含合规提醒</span></summary>' +
+          '<div class="chx-fold-bd"><div class="grid2">' +
+          '<div class="panel"><div class="panel-head"><h3><span data-i="antenna"></span>通道口径</h3><span class="hint">给技术同学看的</span></div><div class="panel-body">' +
+            '<dl class="spec">' +
+              '<dt>通道来源</dt><dd>UFI 台账：已注册 + SIM 就绪（后端实时派生）</dd>' +
+              '<dt>发送方言</dt><dd>MESSAGE · R-URI=IMEI · X-SMS=收件号码（X-VOLTE=身份）</dd>' +
+              '<dt>上行回传</dt><dd>UFI → MESSAGE → Kamailio 落库（SMS_RELAY）</dd>' +
+              '<dt>通道确认</dt><dd>UFI 回 200 OK = 已接收；超时 / 4xx 记失败</dd>' +
+              '<dt>运营商风险</dt><dd>高频单卡群发会被拦截 / 空放，务必限速</dd>' +
+            '</dl>' +
+          '</div></div>' +
+          '<div class="panel"><div class="panel-head"><h3><span data-i="alert"></span>合规提醒</h3></div><div class="panel-body">' +
+            '<div class="note warn"><span class="ni">' + I('alert', 15) + '</span><div class="nb"><b>营销短信必须</b>：① 内容含签名（如【坤势通信】）② 含退订方式（如"回T退订"）③ 夜间静默期（23:00–08:00）营销类拒绝单发、群发自动顺延。高频单卡群发会被运营商拦截，请勿关闭限速。</div></div>' +
+          '</div></div>' +
+          '</div></div></details>';
       this.loadPoolMembers();
       this.renderTable();
+      this.updateGuideDiag();
       iconsIn('#chPane');
+    },
+    /* 引导条自检：号码池数据为异步加载，加载完成后回填诊断 */
+    updateGuideDiag() {
+      const el = $('#chGuideDiag');
+      if (!el) return;
+      const h = DB.health();
+      const poolN = ((DB.poolMembers && DB.poolMembers.devices) || [])
+        .filter(d => d.in_pool && d.voip === '1').length;
+      const ok = (h.chOk || 0) > 0 && poolN > 0;
+      el.className = 'chx-diag ' + (ok ? 'ok' : 'warn');
+      el.innerHTML = ok
+        ? '当前就绪：<b>' + h.chOk + '</b> 路可用通道 · 号码池内 <b>' + poolN + '</b> 台设备 · ' + (DB.quietNow() ? '⚠️ 夜间静默中（营销类暂缓）' : '正常放行中')
+        : '待处理：' + (!(h.chOk || 0) ? '<b>暂无可用通道</b>（检查设备注册与 SIM）· ' : '') +
+          (!poolN ? '<b>号码池为空</b>（先完成第 1 步）' : '');
     },
     _syncPoolSelUi() {
       const n = this.poolSel.size;
@@ -1923,11 +2115,53 @@
       }).join('');
       if ($('#pgPoolMem')) $('#pgPoolMem').innerHTML = PG.foot('poolmem', pg);
       this._syncPoolSelUi();
+      this.updateGuideDiag();
     },
     _poolSelectHtml(pool) {
       const pools = ((DB.poolMembers && DB.poolMembers.pools) || []);
-      return ['sim-pool', 'P1'].concat(pools).filter((v, i, a) => v && a.indexOf(v) === i)
+      const fromCh = listPools().map(p => p.id);
+      return ['sim-pool', 'P1'].concat(pools).concat(fromCh)
+        .filter((v, i, a) => v && a.indexOf(v) === i)
         .map(p => '<option value="' + esc(p) + '"' + (p === (pool || 'sim-pool') ? ' selected' : '') + '>' + esc(p) + '</option>').join('');
+    },
+    poolNew() {
+      const labels = {
+        round_robin: '严格轮询',
+        failover: '主备故障转移',
+        least_load: '负载均衡'
+      };
+      const stratOpts = Object.keys(labels).map(k =>
+        '<option value="' + k + '">' + labels[k] + '</option>'
+      ).join('');
+      Modal.open('新建号码池',
+        '<div class="grid2" style="gap:12px">' +
+        '<div><label class="mxtag">池 ID <span style="color:var(--st-err)">*</span></label>' +
+          '<input class="inp mono" id="inpNewPool" style="width:100%" placeholder="如 P2 / market / night" maxlength="16"></div>' +
+        '<div><label class="mxtag">选路策略</label>' +
+          '<select class="sel" id="inpNewStrat" style="width:100%">' + stratOpts + '</select></div></div>' +
+        '<div style="margin-top:12px"><label class="mxtag">外呼触发号（池 DID，可选，逗号分隔）</label>' +
+          '<input class="inp" id="inpNewPoolDid" style="width:100%" placeholder="如 18960700521"></div>' +
+        '<div class="note plain" style="margin-top:10px"><span class="ni">' + I('info', 15) + '</span>' +
+          '<div class="nb">创建后可在下方把设备划入该池；短信群发选择此池时只从池内在线设备发送。</div></div>',
+        '<button class="btn" data-mact="close">取消</button><button class="btn primary" data-mact="ok">创建</button>');
+      Modal.onOk = async () => {
+        const poolId = (($('#inpNewPool') || {}).value || '').trim();
+        const strategy = (($('#inpNewStrat') || {}).value || 'round_robin').trim();
+        const dids = (($('#inpNewPoolDid') || {}).value || '').split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+        if (!/^[A-Za-z0-9_-]{1,16}$/.test(poolId)) {
+          toast('池 ID 无效', '1–16 位字母/数字/下划线/横线', 'err');
+          return false;
+        }
+        try {
+          await DB.createPool(poolId, strategy, dids);
+          toast('号码池已创建', poolId + ' · ' + (labels[strategy] || strategy), 'ok');
+          this.render();
+          return true;
+        } catch (ex) {
+          toast('创建失败', errText(ex), 'err');
+          return false;
+        }
+      };
     },
     joinPool(imei, sim, pool) {
       const opts = this._poolSelectHtml(pool);
@@ -2132,7 +2366,7 @@
         '<tr><td><b>' + esc(t.name) + '</b><div class="mxtag">#' + t.id + (t.created ? ' · ' + esc(t.created) : '') + '</div></td>' +
         '<td><span class="tag ' + (t.type === '营销' ? 'warn' : t.type === '验证码' ? 'info' : '') + '">' + esc(t.type) + '</span></td>' +
         '<td>' + esc(t.vars || '—') + '</td>' +
-        '<td class="sms-body-cell" style="max-width:420px" title="' + esc(t.body) + '">' + esc(t.body) + '</td>' +
+        '<td class="sms-body-cell copyable" style="max-width:420px" data-copy="' + esc(t.body) + '" title="' + esc(t.body) + '（双击复制）">' + esc(t.body) + '</td>' +
         '<td>' + (DB.tplUsage(t.id) ? '<span class="tag purple">' + DB.tplUsage(t.id) + ' 个任务</span>' : '<span class="tag">未引用</span>') + '</td>' +
         '<td class="col-act"><div class="rowbtns">' +
         '<button class="btn xs" data-tpact="edit" data-tpid="' + t.id + '">编辑</button>' +
@@ -2726,11 +2960,307 @@
     }
   };
 
+  /* ════════════════════════════════════════════════════════════ ALERTS */
+  const Alerts = {
+    page: 1,
+    TEST_SAMPLES: [
+      { name: '移动 · 星级客户余额预警 8.60 元（预期 P2）', sender: '10086',
+        text: '尊敬的客户，至10月21日20时，您的账户余额为8.60元。您是3星级客户，在48小时内可享受透支额度为30.00元。欠费停机将影响您的通信畅通，建议您及时预存话费。话费查询请拨1008611。中国移动。' },
+      { name: '移动 · 全球通透支 -31.79 元（预期 P0）', sender: '10086',
+        text: '【话费提醒】尊敬的全球通客户，您好！截止20日20时36分您的账户余额-31.79元，本月可透支额度50.00元。' },
+      { name: '移动 · 充值到账、欠费金额 0.00 元（预期：恢复）', sender: '10086',
+        text: '【充值到账提醒】尊敬的客户您好，20日15时28分您的号码成功缴费100.00元，您的可用余额为116.67元，待返还余额为0.00元，欠费金额为0.00元。' },
+      { name: '联通 · 流量用尽提醒（预期：忽略）', sender: '10010',
+        text: '【中国联通】流量用尽提醒：截至07月30日16时18分，您当月套餐内的国内通用流量已用4.000GB，剩余0.0MB；当前套餐套外流量资费为1元/GB日租宝（当日有效，自动叠加）。' },
+      { name: '电信 · 余额 6.43 元预警（预期 P2）', sender: '10001',
+        text: '尊敬的客户，截至07月17日09时，您的话费余额为6.43元，欠费停机将影响您的使用和星级，请及时交费。' },
+      { name: '广电 · 套外语音费用 5.1 元（预期 P3）', sender: '10099',
+        text: '截止25年12月25日9点36分，您的套餐外语音话费已达5.1元，套外语音资费0.15元/分钟，请合理使用，详询10099。中国广电' },
+      { name: '移动 · 超套餐提醒 147.66 元（预期 P3）', sender: '10086',
+        text: '【超套餐提醒】截至07月20日20时35分，您本月移动数据流量已使用27.26GB，超出套餐流量已达到511.95MB，套餐外流量总费用147.66元。' },
+      { name: '移动 · 本账期出账提醒（预期：默认忽略）', sender: '10086',
+        text: '尊敬的客户，截至2022年3月18日0时23分18秒，您本账期已产生总费用40028元。' },
+      { name: '联通 · 信用度透支提醒（预期 P1）', sender: '10010',
+        text: '联通客户经理友情提醒：您的话费余额已低于0元，已经消费您的信用度，请您在方便时及时缴费。' },
+      { name: '非白名单端口 · 疑似钓鱼（预期：疑似）', sender: '1065712345678',
+        text: '【移动通信】尊敬的客户，您的号码已欠费35.00元即将停机，请立即登录 http://cz-pay.example 充值，逾期将影响使用。' }
+    ],
+    async reload() {
+      await Promise.all([DB.loadAlertStats(), DB.loadAlertSims(), DB.loadAlerts()]);
+    },
+    init() {
+      const seg = $('#alertStatusSeg');
+      if (seg) seg.addEventListener('click', e => {
+        const b = e.target.closest('[data-ast]'); if (!b) return;
+        $$('#alertStatusSeg button').forEach(x => x.classList.toggle('on', x === b));
+        DB.alertsQ.status = b.dataset.ast || 'all';
+        DB.alertsQ.page = 1;
+        this.reload().then(() => this.render());
+      });
+      const apply = () => {
+        DB.alertsQ.type = ($('#alertType') && $('#alertType').value) || '';
+        DB.alertsQ.sim = ($('#alertSim') && $('#alertSim').value) || '';
+        DB.alertsQ.q = ($('#alertKw') && $('#alertKw').value) || '';
+        DB.alertsQ.page = 1;
+        this.reload().then(() => this.render());
+      };
+      const btn = $('#alertApply'); if (btn) btn.addEventListener('click', apply);
+      const kw = $('#alertKw'); if (kw) kw.addEventListener('keydown', e => { if (e.key === 'Enter') apply(); });
+      const scan = $('#alertScan');
+      if (scan) scan.addEventListener('click', async () => {
+        scan.disabled = true;
+        try {
+          const r = await DB.scanAlerts();
+          const n = (r.data && r.data[0] && r.data[0].created) || 0;
+          toast('扫描完成', '新建 ' + n + ' 条告警', 'ok');
+          $('#alertLastScan').textContent = '最近扫描：' + new Date().toLocaleTimeString();
+          await this.reload(); this.render();
+        } catch (ex) { toast('扫描失败', errText(ex), 'err'); }
+        finally { scan.disabled = false; }
+      });
+      const all = $('#alertDoneAll');
+      if (all) all.addEventListener('click', async () => {
+        if (!confirm('确认将全部未处理告警标为已处理？')) return;
+        try {
+          const r = await DB.alertDoneAll();
+          toast('已处理', '更新 ' + (((r.data || [])[0] || {}).updated || 0) + ' 条', 'ok');
+          await this.reload(); this.render();
+        } catch (ex) { toast('操作失败', errText(ex), 'err'); }
+      });
+      const mail = $('#alertMailCfg');
+      if (mail) mail.addEventListener('click', () => this.openMailCfg());
+      const bench = $('#alertTestBench');
+      if (bench) bench.addEventListener('click', () => this.openTestBench());
+      document.body.addEventListener('click', e => {
+        const d1 = e.target.closest('[data-alert-done]');
+        if (d1) {
+          const id = +d1.getAttribute('data-alert-done');
+          DB.alertDone(id).then(() => { toast('已处理', '#' + id, 'ok'); return this.reload(); }).then(() => this.render())
+            .catch(ex => toast('失败', errText(ex), 'err'));
+        }
+        const d2 = e.target.closest('[data-sim-done]');
+        if (d2) {
+          const sim = d2.getAttribute('data-sim') || '';
+          const imei = d2.getAttribute('data-imei') || '';
+          DB.alertSimDone(sim, imei).then(r => {
+            toast('已处理该卡', '更新 ' + (((r.data || [])[0] || {}).updated || 0) + ' 条', 'ok');
+            return this.reload();
+          }).then(() => this.render()).catch(ex => toast('失败', errText(ex), 'err'));
+        }
+      });
+    },
+    levelMeta(a) {
+      const lv = String((a && (a.level || '')) || '');
+      const type = String((a && (a.alert_type || a.label)) || '');
+      if (lv === 'P0' || type === '欠费停机') return { code: 'P0', cls: 'danger', card: 'unread', label: 'P0 欠费停机' };
+      if (lv === 'P1' || type === '欠费预警') return { code: 'P1', cls: 'orange', card: 'warning', label: 'P1 欠费预警' };
+      if (lv === 'P3' || type === '超套费用') return { code: 'P3', cls: 'purple', card: 'p3', label: 'P3 超套费用' };
+      if (lv === 'SUSPECT' || type === '疑似告警') return { code: '疑似', cls: 'gray', card: 'suspect', label: '疑似告警' };
+      if (lv === 'RECOVERED' || type === '充值恢复') return { code: '恢复', cls: 'green', card: 'done', label: '充值恢复' };
+      if (lv === 'IGNORED' || type === '无需处理') return { code: '忽略', cls: 'gray', card: 'suspect', label: '无需处理' };
+      return { code: 'P2', cls: 'warn', card: 'warning', label: type ? ('P2 ' + type) : 'P2 余额不足' };
+    },
+    hl(s) {
+      return esc(s || '').replace(/(欠费停机|已欠费|欠费|停机|余额不足|账户余额|即将停机|暂停服务|停止服务|限制主叫|套餐外|超套餐|[0-9]+\.?[0-9]*\s*元)/g, '<span class="hl">$1</span>');
+    },
+    fmtSim(v) {
+      let d = String(v || '').replace(/\D/g, '');
+      if (d.indexOf('86') === 0 && d.length === 13 && d.charAt(2) === '1') d = d.slice(2);
+      return d || String(v || '');
+    },
+    render() {
+      this.renderKpi();
+      this.renderSims();
+      this.renderList();
+      this.fillSimFilter();
+      Renderer.counts();
+    },
+    renderKpi() {
+      const s = DB.alertStats || {};
+      const box = $('#kpiAlerts'); if (!box) return;
+      box.innerHTML =
+        '<div class="kpi err"><div class="k">P0 欠费停机卡</div><div class="v">' + (s.dangerSims || 0) + '<small> 张</small></div></div>' +
+        '<div class="kpi warn"><div class="k">P1–P3 预警卡</div><div class="v">' + (s.warnSims || 0) + '<small> 张</small></div></div>' +
+        '<div class="kpi info"><div class="k">今日告警邮件</div><div class="v">' + (s.mailedToday || 0) + '<small> 封</small></div></div>' +
+        '<div class="kpi ok"><div class="k">已处理告警</div><div class="v">' + (s.done || 0) + '<small> 条</small></div></div>';
+      const tn = $('#todoN'); if (tn) tn.textContent = s.todo || 0;
+      const ac = $('#abnCount'); if (ac) ac.textContent = ((s.dangerSims || 0) + (s.warnSims || 0)) + ' 张';
+    },
+    renderSims() {
+      const rows = DB.alertSims || [];
+      const tb = $('#abnBody'); const empty = $('#abnEmpty');
+      if (!tb) return;
+      if (!rows.length) {
+        tb.innerHTML = '';
+        if (empty) empty.style.display = '';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+      tb.innerHTML = rows.map(r => {
+        const meta = this.levelMeta(r);
+        const body = String(r.body || '').slice(0, 48);
+        return '<tr>' +
+          '<td class="mono">' + esc(this.fmtSim(r.sim || r.sim_key) || '—') + '</td>' +
+          '<td class="mono">' + esc(r.imei || '—') + '</td>' +
+          '<td>' + esc(r.carrier || '—') + '</td>' +
+          '<td><span class="tag ' + meta.cls + '">' + esc(meta.label || r.status_label || '') + '</span></td>' +
+          '<td>' + esc(r.amount || '—') + '</td>' +
+          '<td title="' + esc(r.body || '') + '">' + esc(body) + (body.length >= 48 ? '…' : '') + '</td>' +
+          '<td>' + (r.todo_n || 0) + '</td>' +
+          '<td class="col-act"><button class="btn sm primary" type="button" data-sim-done="1" data-sim="' +
+            esc(this.fmtSim(r.sim || r.sim_key) || '') + '" data-imei="' + esc(r.imei || '') + '">处理</button></td></tr>';
+      }).join('');
+    },
+    fillSimFilter() {
+      const sel = $('#alertSim'); if (!sel) return;
+      const cur = sel.value;
+      const sims = {};
+      (DB.alertSims || []).forEach(r => { const k = this.fmtSim(r.sim || r.sim_key); if (k) sims[k] = 1; });
+      (DB.alerts.items || []).forEach(a => { const k = this.fmtSim(a.sim); if (k) sims[k] = 1; });
+      sel.innerHTML = '<option value="">全部手机号</option>' +
+        Object.keys(sims).map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
+      if (cur) sel.value = cur;
+    },
+    renderList() {
+      const box = $('#alertList'); if (!box) return;
+      const items = (DB.alerts && DB.alerts.items) || [];
+      const total = (DB.alerts && DB.alerts.total) || 0;
+      const cnt = $('#alertCount'); if (cnt) cnt.textContent = '共 ' + total + ' 条';
+      if (!items.length) {
+        box.innerHTML = '<div class="empty" style="padding:36px;text-align:center;color:#94a3b8">该筛选条件下暂无异常短信</div>';
+      } else {
+        box.innerHTML = items.map(a => {
+          const meta = this.levelMeta(a);
+          const cls = a.status === 'done' ? 'done' : meta.card;
+          const conf = a.confidence ? ('<span class="alert-conf">置信 ' + esc(String(a.confidence)) + '%</span>') : '';
+          return '<div class="alert-card ' + cls + '">' +
+            '<div class="alert-top">' +
+            '<span class="tag ' + meta.cls + '">' + esc(meta.label) + '</span>' + conf +
+            '<span class="alert-title">' + esc(this.fmtSim(a.sim) || a.imei || '') +
+            (a.carrier ? ' · ' + esc(a.carrier) : '') + '</span>' +
+            '<span class="alert-time">' + esc(a.created || '') + '</span>' +
+            '<div class="alert-actions">' +
+            (a.status === 'todo'
+              ? '<button class="btn sm primary" type="button" data-alert-done="' + a.id + '">标为已处理</button>'
+              : '<span class="tag green">已处理</span>') +
+            '</div></div>' +
+            '<div class="alert-sms">' + this.hl(a.body) + '</div>' +
+            '<div class="alert-meta">' +
+            '<span>发送方 <b>' + esc(a.peer || '—') + '</b></span>' +
+            '<span>金额 <b>' + esc(a.amount || '—') + '</b></span>' +
+            '<span>规则 <b>' + esc(a.rule_hit || '—') + '</b></span>' +
+            '<span>邮件 <b>' + esc(a.mail_status || '未发') + '</b></span>' +
+            (a.status === 'done' ? '<span>处理人 <b>' + esc(a.done_by || '') + ' ' + esc(a.done_at || '') + '</b></span>' : '') +
+            '</div></div>';
+        }).join('');
+      }
+      const size = DB.alertsQ.size || 10;
+      const pages = Math.max(1, Math.ceil(total / size));
+      const page = DB.alertsQ.page || 1;
+      const bar = $('#pgAlerts');
+      if (bar) bar.innerHTML = PG.footSrv('alerts', { total: total, page: page, pages: pages, size: size });
+    },
+    async openMailCfg() {
+      let cfg = {};
+      try { cfg = await DB.loadAlertCfg(); } catch (e) { cfg = {}; }
+      Modal.open('告警规则与通知设置',
+        '<label class="mxtag">收件邮箱（逗号分隔）</label>' +
+        '<input class="inp" id="acEmails" style="width:100%" value="' + esc(cfg.emails || '') + '">' +
+        '<div class="grid2" style="gap:12px;margin-top:12px">' +
+        '<div><label class="mxtag">移动阈值（元）</label><input class="inp" id="acThrCmcc" style="width:100%" value="' + esc(String(cfg.thr_cmcc != null ? cfg.thr_cmcc : 10)) + '"></div>' +
+        '<div><label class="mxtag">电信阈值（元）</label><input class="inp" id="acThrCt" style="width:100%" value="' + esc(String(cfg.thr_ct != null ? cfg.thr_ct : 20)) + '"></div>' +
+        '<div><label class="mxtag">联通阈值（元）</label><input class="inp" id="acThrCu" style="width:100%" value="' + esc(String(cfg.thr_cu != null ? cfg.thr_cu : 10)) + '"></div>' +
+        '<div><label class="mxtag">广电阈值（元）</label><input class="inp" id="acThrCb" style="width:100%" value="' + esc(String(cfg.thr_cb != null ? cfg.thr_cb : 20)) + '"></div>' +
+        '</div>' +
+        '<div class="grid2" style="gap:12px;margin-top:12px">' +
+        '<div><label class="mxtag">超套费用阈值（元）</label><input class="inp" id="acOverageTh" style="width:100%" value="' + esc(String(cfg.overage_threshold != null ? cfg.overage_threshold : 50)) + '"></div>' +
+        '<div><label class="mxtag">非白名单端口</label><select class="sel" id="acPortPol" style="width:100%">' +
+          '<option value="suspect"' + ((cfg.unknown_port_policy || 'suspect') === 'suspect' ? ' selected' : '') + '>降级为疑似</option>' +
+          '<option value="ignore"' + (cfg.unknown_port_policy === 'ignore' ? ' selected' : '') + '>直接忽略</option>' +
+        '</select></div></div>' +
+        '<div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">' +
+        '<label><input type="checkbox" id="acSus"' + (cfg.enable_suspend !== 0 ? ' checked' : '') + '> P0 欠费停机告警</label>' +
+        '<label><input type="checkbox" id="acLow"' + (cfg.enable_low !== 0 ? ' checked' : '') + '> P1/P2 预警告警</label>' +
+        '<label><input type="checkbox" id="acOverage"' + (cfg.enable_overage !== 0 ? ' checked' : '') + '> P3 超套费用告警</label>' +
+        '<label><input type="checkbox" id="acBilling"' + (cfg.billing_alert ? ' checked' : '') + '> 出账提醒按告警处理</label>' +
+        '<label><input type="checkbox" id="acDed"' + (cfg.dedupe !== 0 ? ' checked' : '') + '> 24 小时同卡同类型去重</label></div>' +
+        '<p class="hint" style="margin-top:10px">端口白名单：移动 10086/1008611、联通 10010、电信 10000/10001/11888、广电 10099。命中 P0–P3 后按系统 SMTP 发信。</p>',
+        '<button class="btn" data-mact="close">取消</button><button class="btn primary" data-mact="ok">保存</button>'
+      );
+      Modal.onOk = async () => {
+        try {
+          await DB.saveAlertCfg({
+            emails: ($('#acEmails') && $('#acEmails').value) || '',
+            thr_cmcc: ($('#acThrCmcc') && $('#acThrCmcc').value) || 10,
+            thr_ct: ($('#acThrCt') && $('#acThrCt').value) || 20,
+            thr_cu: ($('#acThrCu') && $('#acThrCu').value) || 10,
+            thr_cb: ($('#acThrCb') && $('#acThrCb').value) || 20,
+            overage_threshold: ($('#acOverageTh') && $('#acOverageTh').value) || 50,
+            unknown_port_policy: ($('#acPortPol') && $('#acPortPol').value) || 'suspect',
+            enable_suspend: ($('#acSus') && $('#acSus').checked) ? 1 : 0,
+            enable_low: ($('#acLow') && $('#acLow').checked) ? 1 : 0,
+            enable_overage: ($('#acOverage') && $('#acOverage').checked) ? 1 : 0,
+            billing_alert: ($('#acBilling') && $('#acBilling').checked) ? 1 : 0,
+            dedupe: ($('#acDed') && $('#acDed').checked) ? 1 : 0
+          });
+          toast('已保存', '告警规则设置', 'ok');
+        } catch (ex) { toast('保存失败', errText(ex), 'err'); return false; }
+      };
+    },
+    openTestBench() {
+      const samples = this.TEST_SAMPLES;
+      Modal.open('规则测试台',
+        '<label class="mxtag">内置样本</label>' +
+        '<select class="sel" id="tbSample" style="width:100%"><option value="">— 选择样本一键填入 —</option>' +
+        samples.map((s, i) => '<option value="' + i + '">' + esc(s.name) + '</option>').join('') +
+        '</select>' +
+        '<div class="grid2" style="gap:12px;margin-top:12px">' +
+        '<div><label class="mxtag">发送端口</label><input class="inp" id="tbPeer" style="width:100%" placeholder="如 10086" value="10086"></div>' +
+        '<div style="display:flex;align-items:flex-end"><button type="button" class="btn primary" id="tbRun" style="width:100%">分级判定</button></div></div>' +
+        '<label class="mxtag" style="margin-top:12px;display:block">短信原文</label>' +
+        '<textarea class="inp" id="tbBody" rows="6" style="width:100%" placeholder="粘贴运营商短信原文…"></textarea>' +
+        '<div class="tb-result" id="tbResult">选择样本或粘贴原文后点「分级判定」</div>',
+        '<button class="btn" data-mact="close">关闭</button>',
+        'lg'
+      );
+      const fill = () => {
+        const i = +(($('#tbSample') && $('#tbSample').value) || -1);
+        if (i < 0 || !samples[i]) return;
+        $('#tbBody').value = samples[i].text;
+        $('#tbPeer').value = samples[i].sender;
+      };
+      const run = async () => {
+        const body = (($('#tbBody') && $('#tbBody').value) || '').trim();
+        const peer = (($('#tbPeer') && $('#tbPeer').value) || '').trim();
+        if (!body) { toast('请填写短信原文', '', 'warn'); return; }
+        try {
+          const r = await DB.classifyAlert(body, peer);
+          const hit = (r.data && r.data[0]) || r[0] || {};
+          const meta = this.levelMeta({ level: hit.level, alert_type: hit.label });
+          const amts = (hit.amounts || []).map(a => a.name + ' ' + a.value + ' 元').join('；') || '—';
+          const hits = (hit.hits || []).join('；') || '—';
+          const notes = (hit.notes || []).join('；') || '—';
+          $('#tbResult').innerHTML =
+            '<span class="tag ' + meta.cls + ' lv">' + esc(meta.label) + '</span>' +
+            '<span>置信度 <b>' + esc(String(hit.confidence || 0)) + '%</b></span> · ' +
+            '<span>运营商 <b>' + esc(hit.carrier || '—') + '</b></span> · ' +
+            '<span>白名单 <b>' + (hit.whitelisted ? '是' : '否') + '</b></span>' +
+            '<div style="margin-top:8px">金额：' + esc(amts) + '</div>' +
+            '<div>命中：' + esc(hits) + '</div>' +
+            '<div>备注：' + esc(notes) + '</div>';
+        } catch (ex) { toast('判定失败', errText(ex), 'err'); }
+      };
+      if ($('#tbSample')) $('#tbSample').addEventListener('change', fill);
+      if ($('#tbRun')) $('#tbRun').addEventListener('click', run);
+    }
+  };
+
   /* ════════════════════════════════════════════════════════════ RENDERER */
   const Renderer = {
     render(v) {
       if (v === 'compose') { if (DB.loaded) { Compose.renderTplSel(); Compose.renderVars(); Compose.statRcpts(); Compose.check(); Compose.renderParams(); } }
       else if (v === 'records') Records.table();
+      else if (v === 'alerts') Alerts.render();
       else if (v === 'campaign') Campaign.render();
       else if (v === 'channels') Channels.render();
       else if (v === 'tpl') Tpl.render();
@@ -2748,6 +3278,8 @@
       $('#cntTpl').textContent = c.tpl || 0;
       $('#cntBlack').textContent = c.black || 0;
       $('#cntWords').textContent = c.words || 0;
+      const ca = $('#cntAlerts');
+      if (ca) ca.textContent = (DB.alertStats && DB.alertStats.todo) || 0;
       const ck = $('#cntKeys');
       if (ck) ck.textContent = (DB.apikeys && DB.apikeys.length) || 0;
     },
@@ -2766,6 +3298,7 @@
       else if (v === 'blacklist') await DB.loadBlack();
       else if (v === 'words') await DB.loadWords();
       else if (v === 'records') await DB.loadRecords();
+      else if (v === 'alerts') await Alerts.reload();
       else if (v === 'openapi') {
         await DB.loadApiKeys();
         try { await DB.loadWhitelist(); } catch (e2) { /* 白名单失败不阻断 */ }
@@ -2791,7 +3324,14 @@
     Blacklist.init();
     Words.init();
     OpenApi.init();
+    Alerts.init();
+    try { await DB.loadAlertStats(); Renderer.counts(); } catch (e) { /* 告警统计失败不阻断 */ }
     PG.reg('campaign', () => Campaign.render());
+    PG.reg('alerts', () => {
+      DB.alertsQ.page = PG.st.alerts ? PG.st.alerts.page : 1;
+      DB.alertsQ.size = PG.st.alerts ? PG.st.alerts.size : 10;
+      DB.loadAlerts().then(() => Alerts.renderList());
+    });
     PG.reg('channels', () => Channels.renderTable());
     PG.reg('poolmem', () => Channels.renderPoolMembers());
     PG.reg('tpl', () => Tpl.render());
@@ -2806,11 +3346,14 @@
     Renderer.render(APP.view);
 
     setInterval(() => { $('#clock').textContent = fmtTime(new Date()); }, 1000);
+    bindListCopyHelpers();
     APP.timer = setInterval(async () => {
       if (APP.paused || document.hidden) return;
+      if (isSelectingText() || hasTextSelection()) return; /* 拖选 / 已选中时暂缓刷新 */
       const ae = document.activeElement;
       const typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
       try { await DB.refresh(); } catch (ex) { return; }
+      if (isSelectingText() || hasTextSelection()) return;
       if (APP.view === 'compose' || APP.view === 'channels') {
         Renderer.pills();
         Renderer.counts();

@@ -42,6 +42,7 @@ from modules.api.api_routes import api
 import modules.api.ufi_device  # UFI get-url / sip-setting device APIs
 import modules.api.ufi_comm  # UFI call-center comm-management APIs (ufi_pool overlay)
 import modules.api.ufi_sms  # UFI SMS Center APIs (pool as SMS channel)
+import modules.api.ufi_sms_alert  # carrier arrears / low-balance SMS alerts
 import modules.api.ufi_sms_gateway  # Open HTTP SMS gateway for third-party platforms
 import modules.api.ufi_whitelist  # IP whitelist for SMS API + carrier SIP对接
 import modules.api.acl as acl  # customers, roles, menu permissions

@@ -478,10 +478,12 @@ def list_carriers(db, channels=None):
     """运营商列表 = 池内 carrier ∪ 已配置 hook ∪ type=8 gwid≥100。"""
     _ensure_gw_tables(db)
     names = sms._carrier_name_map(db)
+    from modules.api.acl import customer_sql
+    frag, fp = customer_sql()
     hooks = {str(r['carrier']): dict(r) for r in db.execute(text(
         "SELECT carrier, name, mo_url, report_url, secret_key, sms_key, enabled, updated_at "
-        "FROM dsip_ufi_sms_carrier"
-    )).mappings().all()}
+        "FROM dsip_ufi_sms_carrier WHERE 1=1" + frag
+    ), fp).mappings().all()}
 
     ids = set()
     for c in (channels or []):

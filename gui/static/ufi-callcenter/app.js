@@ -11,6 +11,40 @@
   const num = n => (n == null ? '—' : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
   const pad2 = n => String(n).padStart(2, '0');
 
+  let _ptrDown = null;
+  function hasTextSelection() {
+    try {
+      const s = window.getSelection && window.getSelection();
+      return !!(s && String(s).replace(/\s+/g, '').length);
+    } catch (e) { return false; }
+  }
+  function trackPtrDown(e) {
+    if (e.button !== 0) return;
+    _ptrDown = { x: e.clientX, y: e.clientY };
+  }
+  function shouldSkipRowNav(e) {
+    if (hasTextSelection()) return true;
+    if (!_ptrDown) return false;
+    return Math.abs((e.clientX || 0) - _ptrDown.x) > 4 || Math.abs((e.clientY || 0) - _ptrDown.y) > 4;
+  }
+  function bindListCopyHelpers(sel) {
+    const el = typeof sel === 'string' ? $(sel) : sel;
+    if (!el || el._copyBound) return;
+    el._copyBound = true;
+    el.addEventListener('mousedown', trackPtrDown, true);
+    el.addEventListener('dblclick', e => {
+      const cell = e.target.closest('.copyable, .mono, .io-imei, td.mono');
+      if (!cell || cell.closest('button,a,input,select,label')) return;
+      const text = (cell.getAttribute('data-copy') || cell.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text || text === '—' || text.length < 2) return;
+      e.preventDefault();
+      const done = () => toast('已复制', text.length > 48 ? text.slice(0, 48) + '…' : text, 'ok', 1600);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(() => {});
+      }
+    });
+  }
+
   const AG_STATE = {
     idle:    { label: '示闲', color: 'var(--ag-idle)', cls: 'ok' },
     busy:    { label: '通话中', color: 'var(--ag-busy)', cls: 'err' },
@@ -593,6 +627,7 @@
         APP.poolSort = APP.poolSort.k === k ? { k, dir: APP.poolSort.dir === 'asc' ? 'desc' : 'asc' } : { k, dir: 'asc' };
         this.render();
       });
+      bindListCopyHelpers('#poolBody');
       $('#poolBody').addEventListener('click', e => {
         const cb = e.target.closest('input[type=checkbox]');
         if (cb) {
@@ -601,6 +636,8 @@
           this.bulk();
           return;
         }
+        if (e.target.closest('button,a,label')) return;
+        if (shouldSkipRowNav(e)) return;
         const tr = e.target.closest('tr[data-imei]');
         if (tr) Drawer.open(tr.dataset.imei);
       });
@@ -1943,12 +1980,17 @@
         this.reload();
       });
       const body = $('#callsBody');
-      if (body) body.addEventListener('click', e => {
-        const tr = e.target.closest('tr[data-ci]');
-        if (!tr) return;
-        const c = (DB.callPage.calls || [])[Number(tr.dataset.ci)];
-        if (c) openCallChain(c);
-      });
+      if (body) {
+        bindListCopyHelpers(body);
+        body.addEventListener('click', e => {
+          if (e.target.closest('button,a,input,label')) return;
+          if (shouldSkipRowNav(e)) return;
+          const tr = e.target.closest('tr[data-ci]');
+          if (!tr) return;
+          const c = (DB.callPage.calls || [])[Number(tr.dataset.ci)];
+          if (c) openCallChain(c);
+        });
+      }
     },
 
     fillCarriers() {
@@ -2182,6 +2224,7 @@
     /* 定时同步真实数据（10s）；paused 时不刷新 */
     APP.timer = setInterval(async () => {
       if (APP.paused || document.hidden) return;
+      if (hasTextSelection()) return;
       try { await DB.reload(); } catch (e) { return; }
       if (DB.BOOT_FAILED) {
         DB.BOOT_FAILED = false;

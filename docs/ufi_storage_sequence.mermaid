@@ -1,0 +1,74 @@
+sequenceDiagram
+    %% ===== v4.2 定稿：upsert 保 id + 业务日 start_ts + cursor 冻结窗口 =====
+    participant C as 前端(data.js)
+    participant A as listUfiCalls
+    participant R as rollup worker (独立 systemd)
+    participant DB as MySQL 5.7
+    participant S as 详情接口
+    participant W as WS ingest
+    participant P as 归档入口
+
+    Note over W,DB: 会话建立即 SET SESSION innodb_lock_wait_timeout=2, lock_wait_timeout=2<br/>persist_ufi_payload 禁止 FOR UPDATE / 禁止裸 except 吞超时
+    W->>DB: INSERT 分片 (is_start/is_end 同正则体系, created_at=NOW()=入库时间)
+    W->>DB: customer_id = 写入时快照（IF NULL 单向认领）
+    alt 锁超时 1205/1206
+        W->>W: log.warning('ingest lock timeout imei=%s') + 计数器（不静默）
+    end
+
+    Note over R,DB: 异步，分钟级；只重建"尾部未定稿窗口"（state=0 或最近 N 分钟有新分片）<br/>边界 = is_start 开组 + is_end 闭组(_LONG_IDLE=1800s) + _MAX_IDLE=600s 兜底<br/>求值顺序写死：is_start 先于 is_end；孤儿并入分支同步置 is_end<br/>trace_id 每次状态变化都变 → 禁止用于归并
+    R->>DB: 扫热表 id 水位线 → 队列 (imei, day)
+    R->>DB: 查 min_hot_day（information_schema.PARTITIONS 最小分区下界，缓存 1h）
+    alt D < min_hot_day（该窗已归档）
+        R->>DB: 跳过 rollup；补传分片直写 dsip_ufi_call_archive (source=1, late=1)
+        Note over R,DB: 防"残通话"：归档后补传不产出 duration_sec=0 的孤片摘要
+    else D >= min_hot_day
+        R->>DB: 读 start_ts ∈ [D-1, D+2) 分片（业务时间，非 created_at）
+        R->>R: 应用层分组（模块级 _ts_sec 支持 ISO/ms/Z/±HH:MM）<br/>window_day = DATE(首分片 start_ts)
+        R->>DB: BEGIN; INSERT ... ON DUPLICATE KEY UPDATE（不含 id/uk，保住原 id）
+        R->>DB: DELETE WHERE imei+window_day AND first_frag_id NOT IN (:kept)（kept 空则跳过）
+        R->>DB: COMMIT
+        Note over R,DB: 稳态 id 不变 → id 快照游标安全；组被合并时旧行删除、id<m cursor 恰好跳过<br/>只 emit window_day == DATE(首分片 start_ts) 的组 → 跨日只写一次
+        R->>DB: 未定稿组 state=0 + retry_at=now+600s 重新入队
+        R->>R: merge_suspect：合并后 duration 放大 >2x 则告警
+    end
+
+    C->>A: GET /ufi/calls?imei=&from=&to=&cursor=
+    A->>A: 页1：解析 from/to → 冻结 wf/wt；max=MAX(id)；f=md5(cid|imei|carrier|wf|wt|outcome|direction)
+    A->>A: 页N：decode(cursor) → validate(v, src, f)，直接用 wf/wt（不重新解析 from/to）
+    alt cursor 失效（v/src/f 不匹配）
+        A-->>C: 400 {error:"cursor_stale", refresh:true}
+        C->>A: 静默清 cursor，回第 1 页（不弹错误）
+    end
+
+    rect rgb(235,245,255)
+    Note over A,DB: 【T3 阶段】src="hot"，need = page_size × R(默认10) + 40
+    A->>DB: dsip_ufi_call WHERE customer_id=:cid AND created_at 窗口 AND id<=max AND id<cursor ORDER BY id DESC
+    DB-->>A: 分片窄列（禁止出现 summary 字样）
+    A->>DB: total 必须同源热表（COUNT LIMIT 100001）或 totalApprox:true
+    A-->>C: calls,total,totalApprox,has_more,pages(中间态),next_cursor{v:1,src:"hot",wf,wt,span}
+    end
+
+    rect rgb(235,255,240)
+    Note over A,DB: 【T5b 阶段】src="sum"，need = page_size + 40；窗口过滤一律 start_ts
+    A->>DB: dsip_ufi_call_summary WHERE customer_id=:cid AND start_ts BETWEEN :wf AND :wt AND id<=max AND id<cursor ORDER BY id DESC
+    DB-->>A: summary 窄列（idx_cid_time(customer_id,start_ts,id) + 精确 COUNT）
+    A-->>C: calls,total,has_more,next_cursor{v:1,src:"sum"}；终止只看 has_more
+    end
+    Note over A,C: 阶段切换：UFI_LIST_SRC hot→sum，在飞 cursor 全 400 → 前端自动回第1页<br/>无需停机、无需双写对齐
+
+    C->>S: GET /ufi/calls/<summary_id>
+    S->>DB: summary WHERE id AND customer_id=:cid（不用 device 归属鉴权）
+    S->>DB: 分片 WHERE imei AND created_at BETWEEN start-600s AND end+600s
+    Note over S: 实时聚合复用 _aggregate_ufi_calls（同一分组顺序）<br/>with_route_log=False + _attach_route_logs(db, calls[:80])
+    DB-->>S: 全链路分片日志
+    S-->>C: source='fragments', authoritative=true, stages, logs, routeLog
+
+    C->>S: GET /ufi/calls/frag/<frag_id>（legacy 回退）
+    S->>DB: 分片 ±600s 窗口聚合
+    S-->>C: source='fragments'
+
+    Note over P,DB: 每月 20 日预建下月/下周分区<br/>REORGANIZE pMAX 仅当 pMAX 为空；非空走停机窗口（先停 WS，ping_timeout=20 必断）
+    C->>P: GET /ufi/archive/calls?from=&to=（平台管理员）
+    P->>DB: dsip_ufi_call_archive（窗口<=31天，UNIQUE(hot_id,created_at)，每批断言 ROW_COUNT()==本批行数）
+    DB-->>P: 归档窄列
+    P-->>C: source='archive', partialTail=true

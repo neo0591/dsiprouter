@@ -25,7 +25,7 @@
       var cfg = (response && response.data && response.data[0]) ? response.data[0] : {};
       $('#cfg_secret').val(cfg.secret_key || '');
       $('#cfg_sip_host').val(cfg.sip_host || '');
-      $('#cfg_sip_port').val(cfg.sip_port || 5060);
+      $('#cfg_sip_port').val(cfg.sip_port || 10560);
       $('#cfg_transport').val(cfg.transport || 'UDP');
       $('#cfg_auto').val(cfg.auto_provision ? '1' : '0');
       $('#cfg_base_url').val(cfg.base_url || '');
@@ -43,7 +43,7 @@
       data: JSON.stringify({
         secret_key: $.trim($('#cfg_secret').val()),
         sip_host: $.trim($('#cfg_sip_host').val()),
-        sip_port: parseInt($('#cfg_sip_port').val(), 10) || 5060,
+        sip_port: parseInt($('#cfg_sip_port').val(), 10) || 10560,
         transport: $('#cfg_transport').val(),
         auto_provision: $('#cfg_auto').val() === '1',
         base_url: $.trim($('#cfg_base_url').val()),

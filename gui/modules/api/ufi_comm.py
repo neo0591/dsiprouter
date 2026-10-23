@@ -746,9 +746,9 @@ def _topo_snapshot(db):
     primary = carriers[0] if carriers else dict(gwid='100', name='VOS', address='', ip='')
 
     return dict(
-        dsip=dict(host=host, domain=domain, sip_port=5060,
+        dsip=dict(host=host, domain=domain, sip_port=10560,
                   cfg='/etc/kamailio/kamailio.cfg',
-                  endpoint='%s:5060' % host),
+                  endpoint='%s:10560' % host),
         carriers=carriers,
         primary_vos=dict(
             gwid=primary.get('gwid'), name=primary.get('name'),
@@ -855,7 +855,9 @@ def _ensure_comm_tables(db):
 
 
 def _comm_rows(db):
-    rows = db.execute(text("SELECT * FROM dsip_ufi_pool")).mappings().all()
+    from modules.api.acl import customer_sql
+    frag, params = customer_sql()
+    rows = db.execute(text("SELECT * FROM dsip_ufi_pool WHERE 1=1" + frag), params).mappings().all()
     return {str(r['imei']): dict(r) for r in rows}
 
 
@@ -893,6 +895,8 @@ def listUfiComm():
         _ensure_ufi_tables(db)
         _ensure_comm_tables(db)
         domain = _ufi_auth_domain()
+        from modules.api.acl import customer_sql
+        frag, fp = customer_sql('d')
         rows = db.execute(text(
             "SELECT d.id, d.imei, d.sn, d.imsi, d.sim_number, d.agent_type, d.sip_reg_status, "
             "d.cellular_status, d.cellular_network, d.wlan_status, d.last_ip, d.last_msg_type, "
@@ -902,8 +906,8 @@ def listUfiComm():
             "d.ws_online, d.sim_state, d.status_json, d.pending_settings, "
             "(SELECT COUNT(*) FROM location loc WHERE loc.username = d.imei AND loc.expires > NOW()) AS online, "
             "TIMESTAMPDIFF(SECOND, d.last_seen, NOW()) AS gap_sec "
-            "FROM dsip_ufi_device d ORDER BY d.last_seen DESC"
-        )).mappings().all()
+            "FROM dsip_ufi_device d WHERE 1=1" + frag + " ORDER BY d.last_seen DESC"
+        ), fp).mappings().all()
         live = set()
         try:
             from modules.api.ufi_ws import ws_connected_imeis
@@ -985,6 +989,9 @@ def updateUfiComm(imei):
         db = startSession()
         _ensure_ufi_tables(db)
         _ensure_comm_tables(db)
+        from modules.api.acl import require_owned_imei, stamp_customer, ensure_acl_tables
+        ensure_acl_tables(db)
+        require_owned_imei(db, imei)
         exists = db.execute(text(
             "SELECT id FROM dsip_ufi_device WHERE imei = :imei"
         ), {'imei': imei}).first()

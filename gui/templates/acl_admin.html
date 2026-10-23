@@ -1,83 +1,312 @@
 {% extends 'fullwidth_layout.html' %}
 {% block title %}客户与权限{% endblock %}
+
+{% block custom_css %}
+<style>
+:root{--acl-primary:#2563eb;--acl-danger:#dc2626;--acl-border:#e5e7eb;--acl-muted:#6b7280}
+.acl-page{max-width:1280px;margin:0 auto;padding:24px 24px 56px}
+.acl-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.acl-header h3{font-weight:700;margin:0 0 4px;font-size:22px}
+.acl-header p{color:var(--acl-muted);margin:0;font-size:13.5px}
+.acl-identity{display:inline-flex;align-items:center;gap:8px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;white-space:nowrap}
+.acl-identity .ti{font-size:15px}
+.acl-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+.acl-stat{background:#fff;border:1px solid var(--acl-border);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px}
+.acl-stat-ico{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+.acl-stat-ico.c1{background:#eff6ff;color:#2563eb}
+.acl-stat-ico.c2{background:#f5f3ff;color:#7c3aed}
+.acl-stat-ico.c3{background:#ecfdf5;color:#059669}
+.acl-stat-num{font-size:24px;font-weight:700;line-height:1.1}
+.acl-stat-label{color:var(--acl-muted);font-size:12.5px}
+.acl-card{background:#fff;border:1px solid var(--acl-border);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04);overflow:hidden}
+.acl-tabs{display:flex;gap:4px;padding:10px 16px 0;border-bottom:1px solid var(--acl-border);list-style:none;margin:0}
+.acl-tabs a{display:block;padding:10px 16px 12px;color:var(--acl-muted);text-decoration:none;font-weight:600;font-size:14px;border-bottom:2px solid transparent}
+.acl-tabs a:hover{color:#111827}
+.acl-tabs a.active{color:var(--acl-primary);border-bottom-color:var(--acl-primary)}
+.acl-toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:14px 18px;flex-wrap:wrap}
+.acl-search{position:relative;min-width:240px;flex:0 1 280px}
+.acl-search .ti{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#9ca3af;font-size:15px}
+.acl-search input{padding-left:34px;border-radius:8px;font-size:13.5px;height:36px}
+.acl-pane{padding:0 18px 18px}
+.acl-table{width:100%;margin:0}
+.acl-table thead th{background:#f9fafb;color:#374151;font-size:12.5px;font-weight:600;border-bottom:1px solid var(--acl-border);padding:10px 12px;white-space:nowrap}
+.acl-table tbody td{padding:12px;vertical-align:middle;font-size:13.5px;border-bottom:1px solid #f1f3f5}
+.acl-table tbody tr:hover{background:#f8faff}
+.row-name{font-weight:600;color:#111827}
+.row-sub{color:#9ca3af;font-size:12px}
+.acl-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.acl-btn{border-radius:8px;font-size:13px;padding:6px 12px;font-weight:600}
+.acl-btn-primary{background:var(--acl-primary);border-color:var(--acl-primary);color:#fff}
+.acl-btn-primary:hover{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+.acl-btn-ghost{border:1px solid var(--acl-border);background:#fff;color:#374151}
+.acl-btn-ghost:hover{background:#f3f4f6}
+.acl-btn-danger-ghost{border:1px solid #fecaca;background:#fff;color:var(--acl-danger)}
+.acl-btn-danger-ghost:hover{background:#fef2f2}
+.badge-soft{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;display:inline-block}
+.badge-soft.on{background:#ecfdf5;color:#047857}
+.badge-soft.off{background:#f3f4f6;color:#6b7280}
+.badge-soft.sys{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+.badge-soft.super{background:#f5f3ff;color:#6d28d9}
+.badge-soft.plat{background:#eff6ff;color:#1d4ed8}
+.acl-empty{text-align:center;color:#9ca3af;padding:36px 0!important;font-size:13.5px}
+.modal-content{border:none;border-radius:14px;box-shadow:0 20px 50px rgba(16,24,40,.18)}
+.modal-header{border-bottom:1px solid var(--acl-border);padding:16px 20px}
+.modal-title{font-size:16px;font-weight:700}
+.modal-body{padding:20px}
+.modal-footer{border-top:1px solid var(--acl-border);padding:14px 20px;gap:8px}
+.acl-form-label{font-size:12.5px;font-weight:600;color:#374151;margin-bottom:5px}
+.acl-form .form-control,.acl-form .form-select{border-radius:8px;font-size:13.5px}
+.menu-editor{border:1px solid var(--acl-border);border-radius:10px;background:#f9fafb}
+.menu-editor-tools{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--acl-border);flex-wrap:wrap}
+.menu-editor-tools .form-control{height:32px;border-radius:8px;font-size:13px;flex:1;min-width:160px}
+.menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;padding:12px;max-height:380px;overflow:auto;align-items:start}
+.menu-card{background:#fff;border:1px solid var(--acl-border);border-radius:10px;overflow:hidden}
+.menu-card.card-hidden{display:none}
+.menu-card-head{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f9fafb;border-bottom:1px solid #f1f3f5}
+.menu-card-head label{display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;color:#111827;margin:0}
+.menu-card-head .form-check-input{width:15px;height:15px;margin-top:0}
+.menu-all{font-size:12px;color:var(--acl-primary);text-decoration:none;white-space:nowrap}
+.menu-all:hover{text-decoration:underline}
+.menu-sub{padding:8px 10px 10px}
+.menu-sub + .menu-sub{border-top:1px dashed #f1f3f5}
+.menu-sub.hidden{display:none}
+.menu-sub-title{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:#374151;margin-bottom:4px}
+.menu-sub-title .form-check-input{width:14px;height:14px;margin-top:0}
+.menu-sub-items{padding-left:22px}
+.menu-sub-items label{display:block;font-size:12.5px;color:#4b5563;font-weight:normal;margin:3px 0}
+.menu-sub-items .form-check-input{width:14px;height:14px;margin-top:2px}
+.acl-toast-wrap{position:fixed;top:70px;right:20px;z-index:3000;display:flex;flex-direction:column;gap:8px}
+.acl-toast{min-width:220px;background:#111827;color:#fff;border-radius:10px;padding:11px 16px;font-size:13.5px;display:flex;align-items:center;gap:8px;box-shadow:0 10px 24px rgba(16,24,40,.25);animation:aclIn .2s ease}
+.acl-toast.ok{background:#065f46}
+.acl-toast.err{background:#991b1b}
+@keyframes aclIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+.form-switch .form-check-input{cursor:pointer}
+</style>
+{% endblock %}
+
 {% block body %}
-<div class="container-fluid" style="padding:16px 20px 40px">
-  <h3 style="margin-bottom:6px">客户与权限</h3>
-  <p class="text-muted" style="margin-bottom:16px">
-    平台超级管理员可查看全部客户数据。客户账号只能看到本客户数据。角色勾选可访问的菜单和子页签。
-    {% if customer_name %}<b>当前客户：{{ customer_name }}</b>{% elif is_platform_admin %}<b>当前身份：平台超级管理员</b>{% endif %}
-  </p>
-
-  <ul class="nav nav-tabs" id="aclTabs">
-    <li class="nav-item"><a class="nav-link active" href="#" data-pane="cust">客户</a></li>
-    <li class="nav-item"><a class="nav-link" href="#" data-pane="role">角色与菜单</a></li>
-    <li class="nav-item"><a class="nav-link" href="#" data-pane="user">用户账户</a></li>
-  </ul>
-
-  <div id="pane-cust" class="acl-pane" style="margin-top:14px">
-    <div class="mb-2" id="custForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
-      <label>名称<input class="form-control" id="cName"></label>
-      <label>编码<input class="form-control" id="cCode" placeholder="可选"></label>
-      <label>备注<input class="form-control" id="cNote"></label>
-      <button class="btn btn-success" id="cAdd" type="button">新建客户</button>
+<div class="acl-page">
+  <div class="acl-header">
+    <div>
+      <h3>客户与权限</h3>
+      <p>平台超级管理员可查看全部客户数据，客户账号只能查看本客户数据；角色勾选可访问的菜单和子页签。</p>
     </div>
-    <table class="table table-striped" id="cTable"><thead><tr><th>名称</th><th>编码</th><th>用户数</th><th>备注</th><th>状态</th><th></th></tr></thead><tbody></tbody></table>
+    <span class="acl-identity"><i class="ti ti-shield-lock"></i>
+      {% if customer_name %}当前客户：{{ customer_name }}{% elif is_platform_admin %}当前身份：平台超级管理员{% endif %}
+    </span>
   </div>
 
-  <div id="pane-role" class="acl-pane" style="display:none;margin-top:14px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end" class="mb-2">
-      <label>角色名<input class="form-control" id="rName"></label>
-      <label id="rCustWrap">归属客户<select class="form-control" id="rCust"></select></label>
-      <label id="rSuperWrap" style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><input type="checkbox" id="rSuper"> 平台超级管理员（看全部客户）</label>
-      <button class="btn btn-success" id="rAdd" type="button">新建角色</button>
-    </div>
-    <div id="rTree" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;max-height:280px;overflow:auto;margin-bottom:10px"></div>
-    <table class="table table-striped" id="rTable"><thead><tr><th>角色</th><th>客户</th><th>超级管理员</th><th>菜单数</th><th></th></tr></thead><tbody></tbody></table>
+  <div class="acl-stats">
+    <div class="acl-stat"><div class="acl-stat-ico c1"><i class="ti ti-building-community"></i></div>
+      <div><div class="acl-stat-num" id="statCust">-</div><div class="acl-stat-label">客户</div></div></div>
+    <div class="acl-stat"><div class="acl-stat-ico c2"><i class="ti ti-users-group"></i></div>
+      <div><div class="acl-stat-num" id="statRole">-</div><div class="acl-stat-label">角色</div></div></div>
+    <div class="acl-stat"><div class="acl-stat-ico c3"><i class="ti ti-user"></i></div>
+      <div><div class="acl-stat-num" id="statUser">-</div><div class="acl-stat-label">用户账户</div></div></div>
   </div>
 
-  <div id="pane-user" class="acl-pane" style="display:none;margin-top:14px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end" class="mb-2" id="uForm">
-      <input type="hidden" id="uEditId" value="">
-      <label>用户名<input class="form-control" id="uName" autocomplete="off"></label>
-      <label>密码<span class="text-muted" id="uPassHint" style="font-size:12px;font-weight:normal"></span>
-        <div class="wrapper-fieldicon-right" style="min-width:180px">
-          <input class="form-control" id="uPass" type="password" autocomplete="new-password" style="padding-right:36px">
-          <i class="field-icon ti ti-eye-off" id="uPassToggle" title="显示/隐藏密码" role="button" tabindex="0" style="bottom:10px;right:10px;color:#6b7280"></i>
-        </div>
-      </label>
-      <label>名<input class="form-control" id="uFirst"></label>
-      <label>姓<input class="form-control" id="uLast"></label>
-      <label>角色<select class="form-control" id="uRole"></select></label>
-      <label id="uCustWrap">客户<select class="form-control" id="uCust"></select></label>
-      <button class="btn btn-success" id="uAdd" type="button">新建用户</button>
-      <button class="btn btn-secondary" id="uCancel" type="button" style="display:none">取消编辑</button>
+  <div class="acl-card">
+    <ul class="nav acl-tabs" id="aclTabs">
+      <li class="nav-item"><a class="nav-link active" href="#" data-pane="cust">客户</a></li>
+      <li class="nav-item"><a class="nav-link" href="#" data-pane="role">角色与菜单</a></li>
+      <li class="nav-item"><a class="nav-link" href="#" data-pane="user">用户账户</a></li>
+    </ul>
+
+    <div id="pane-cust" class="acl-pane">
+      <div class="acl-toolbar">
+        <div class="acl-search"><i class="ti ti-search"></i><input class="form-control" id="cSearch" placeholder="搜索客户名称 / 编码 / 备注"></div>
+        <button class="btn acl-btn acl-btn-ghost{% if not is_platform_admin %} d-none{% endif %}" id="cPool" type="button">待认领</button>
+        <button class="btn acl-btn acl-btn-ghost{% if not is_platform_admin %} d-none{% endif %}" id="cMove" type="button">转移设备</button>
+        <button class="btn acl-btn acl-btn-primary{% if not is_platform_admin %} d-none{% endif %}" id="cNew" type="button"><i class="ti ti-plus"></i> 新建客户</button>
+      </div>
+      <table class="table acl-table" id="cTable">
+        <thead><tr><th>名称</th><th>编码</th><th class="text-center">用户数</th><th>备注</th><th>状态</th><th class="text-end">操作</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
-    <table class="table table-striped" id="uTable"><thead><tr><th>用户名</th><th>姓名</th><th>客户</th><th>角色</th><th></th></tr></thead><tbody></tbody></table>
+
+    <div id="pane-role" class="acl-pane" style="display:none">
+      <div class="acl-toolbar">
+        <div class="acl-search"><i class="ti ti-search"></i><input class="form-control" id="rSearch" placeholder="搜索角色名"></div>
+        <button class="btn acl-btn acl-btn-primary" id="rNew" type="button"><i class="ti ti-plus"></i> 新建角色</button>
+      </div>
+      <table class="table acl-table" id="rTable">
+        <thead><tr><th>角色</th><th class="text-center">菜单数</th><th class="text-end">操作</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="pane-user" class="acl-pane" style="display:none">
+      <div class="acl-toolbar">
+        <div class="acl-search"><i class="ti ti-search"></i><input class="form-control" id="uSearch" placeholder="搜索用户名 / 姓名 / 角色"></div>
+        <button class="btn acl-btn acl-btn-primary" id="uNew" type="button"><i class="ti ti-plus"></i> 新建用户</button>
+      </div>
+      <table class="table acl-table" id="uTable">
+        <thead><tr><th>用户名</th><th>姓名</th><th>客户</th><th>角色</th><th class="text-end">操作</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 </div>
+
+<!-- 客户 新建/编辑 -->
+<div class="modal fade" id="custModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="custModalTitle">新建客户</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+      <div class="modal-body acl-form">
+        <div class="mb-3"><div class="acl-form-label">客户名称 <span class="text-danger">*</span></div>
+          <input class="form-control" id="cName" placeholder="如：厦门分公司"></div>
+        <div class="mb-3"><div class="acl-form-label">编码</div>
+          <input class="form-control" id="cCode" placeholder="可选，留空自动生成"></div>
+        <div class="mb-3"><div class="acl-form-label">SIP 域</div>
+          <input class="form-control" id="cDomain" placeholder="留空则使用平台默认域"></div>
+        <div class="mb-1"><div class="acl-form-label">备注</div>
+          <input class="form-control" id="cNote" placeholder="选填"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn acl-btn acl-btn-ghost" type="button" data-bs-dismiss="modal">取消</button>
+        <button class="btn acl-btn acl-btn-primary" id="cSave" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="importTitle">导入设备</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+      <div class="modal-body acl-form">
+        <input type="hidden" id="importCid" value="">
+        <div class="acl-form-label">每行一个 IMEI，SIM 可选，逗号分隔</div>
+        <textarea class="form-control" id="importText" rows="8" placeholder="861717067605136,13800138000"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn acl-btn acl-btn-ghost" type="button" data-bs-dismiss="modal">取消</button>
+        <button class="btn acl-btn acl-btn-primary" id="importSave" type="button">导入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="moveModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">转移设备到客户</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+      <div class="modal-body">
+        <table class="table acl-table" id="moveTable">
+          <thead><tr><th>IMEI</th><th>当前客户</th><th>转移到</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="poolModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">待认领设备</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+      <div class="modal-body">
+        <table class="table acl-table" id="poolTable">
+          <thead><tr><th>IMEI</th><th>SIM</th><th>最近上报</th><th>认领到</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 角色 新建/编辑 -->
+<div class="modal fade" id="roleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="roleModalTitle">新建角色</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+      <div class="modal-body acl-form">
+        <div class="row g-3 mb-3">
+          <div class="col-md-6"><div class="acl-form-label">角色名 <span class="text-danger">*</span></div>
+            <input class="form-control" id="rName" placeholder="如：客户操作员"></div>
+          <div class="col-md-6 d-flex align-items-end" id="rSuperWrap">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="rSuper">
+              <label class="form-check-label" for="rSuper" style="font-size:13px">平台超级管理员（看全部客户）</label>
+            </div>
+          </div>
+        </div>
+        <div class="acl-form-label">可访问菜单</div>
+        <div class="menu-editor">
+          <div class="menu-editor-tools">
+            <i class="ti ti-search" style="color:#9ca3af"></i>
+            <input class="form-control" id="menuSearch" placeholder="搜索菜单">
+            <button class="btn acl-btn acl-btn-ghost" id="menuAllBtn" type="button">全选</button>
+            <button class="btn acl-btn acl-btn-ghost" id="menuNoneBtn" type="button">清空</button>
+          </div>
+          <div class="menu-grid" id="rTree"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn acl-btn acl-btn-ghost" type="button" data-bs-dismiss="modal">取消</button>
+        <button class="btn acl-btn acl-btn-primary" id="rSave" type="button">保存角色</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 用户 新建/编辑 -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="userModalTitle">新建用户</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+      <div class="modal-body acl-form">
+        <input type="hidden" id="uEditId" value="">
+        <div class="row g-3">
+          <div class="col-6"><div class="acl-form-label">用户名 <span class="text-danger">*</span></div>
+            <input class="form-control" id="uName" autocomplete="off"></div>
+          <div class="col-6"><div class="acl-form-label">密码 <span class="text-danger" id="uPassReq">*</span>
+              <span class="text-muted fw-normal" id="uPassHint" style="font-size:12px"></span></div>
+            <div class="wrapper-fieldicon-right">
+              <input class="form-control" id="uPass" type="password" autocomplete="new-password" placeholder="" style="padding-right:36px">
+              <i class="field-icon ti ti-eye-off" id="uPassToggle" title="显示/隐藏密码" role="button" tabindex="0" style="bottom:10px;right:10px;color:#6b7280"></i>
+            </div>
+          </div>
+          <div class="col-6"><div class="acl-form-label">名</div><input class="form-control" id="uFirst"></div>
+          <div class="col-6"><div class="acl-form-label">姓</div><input class="form-control" id="uLast"></div>
+          <div class="col-6"><div class="acl-form-label">角色</div><select class="form-select" id="uRole"></select></div>
+          <div class="col-6" id="uCustWrap"><div class="acl-form-label">客户</div><select class="form-select" id="uCust"></select></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn acl-btn acl-btn-ghost" id="uCancel" type="button" data-bs-dismiss="modal">取消</button>
+        <button class="btn acl-btn acl-btn-primary" id="uSave" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="acl-toast-wrap" id="toastWrap"></div>
 {% endblock %}
+
 {% block custom_js %}
 <script>
 (function () {
   var API = window.API_BASE_URL || (window.location.protocol + '//' + window.location.host + '/api/v1/');
   var platform = !!window.IS_PLATFORM_ADMIN;
   var customers = [], roles = [], users = [], tree = [];
-  var editUserId = 0;
-  if (!platform) {
-    var cf = document.getElementById('custForm'); if (cf) cf.style.display = 'none';
-    var rw = document.getElementById('rCustWrap'); if (rw) rw.style.display = 'none';
-    var sw = document.getElementById('rSuperWrap'); if (sw) sw.style.display = 'none';
-    var uw = document.getElementById('uCustWrap'); if (uw) uw.style.display = 'none';
-  }
-  document.querySelectorAll('#aclTabs a').forEach(function (a) {
-    a.addEventListener('click', function (e) {
-      e.preventDefault();
-      document.querySelectorAll('#aclTabs a').forEach(function (x) { x.classList.remove('active'); });
-      a.classList.add('active');
-      document.querySelectorAll('.acl-pane').forEach(function (p) { p.style.display = 'none'; });
-      document.getElementById('pane-' + a.getAttribute('data-pane')).style.display = 'block';
+  var editUserId = 0, editingRoleId = 0, editingCustId = 0;
+  var modalInst = {};
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
     });
-  });
+  }
   function req(url, method, body) {
     return fetch(url, {
       method: method || 'GET', credentials: 'same-origin',
@@ -90,34 +319,125 @@
       });
     });
   }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+  function toast(msg, type) {
+    var el = document.createElement('div');
+    el.className = 'acl-toast ' + (type === 'err' ? 'err' : 'ok');
+    el.innerHTML = '<i class="ti ' + (type === 'err' ? 'ti-alert-circle' : 'ti-circle-check') + '"></i>' + esc(msg);
+    $('toastWrap').appendChild(el);
+    setTimeout(function () { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; }, 2400);
+    setTimeout(function () { el.remove(); }, 2800);
+  }
+  function openModal(id) {
+    if (!modalInst[id]) modalInst[id] = new bootstrap.Modal($('' + id));
+    modalInst[id].show();
+  }
+  function closeModal(id) { if (modalInst[id]) modalInst[id].hide(); }
+
+  /* ── tabs ── */
+  document.querySelectorAll('#aclTabs a').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      document.querySelectorAll('#aclTabs a').forEach(function (x) { x.classList.remove('active'); });
+      a.classList.add('active');
+      document.querySelectorAll('.acl-pane').forEach(function (p) { p.style.display = 'none'; });
+      document.getElementById('pane-' + a.getAttribute('data-pane')).style.display = 'block';
+    });
+  });
+
+  /* ── 表格搜索 ── */
+  function bindSearch(inputId, tbodyId) {
+    $(inputId).addEventListener('input', function () {
+      var kw = this.value.trim().toLowerCase();
+      document.querySelectorAll('#' + tbodyId + ' tr').forEach(function (tr) {
+        if (tr.querySelector('.acl-empty')) return;
+        tr.style.display = (!kw || tr.textContent.toLowerCase().indexOf(kw) >= 0) ? '' : 'none';
+      });
     });
   }
-  function renderTree(nodes, depth) {
+  bindSearch('cSearch', 'cTable');
+  bindSearch('rSearch', 'rTable');
+  bindSearch('uSearch', 'uTable');
+
+  /* ── 菜单编辑器 ── */
+  function renderMenuEditor(nodes) {
     return (nodes || []).map(function (n) {
-      return '<label style="display:block;margin-left:' + (depth * 16) + 'px"><input type="checkbox" class="mk" value="' + n.key + '"> ' + n.label + '</label>' + renderTree(n.children, depth + 1);
+      var subs = (n.children || []).map(function (sub) {
+        var itemsHtml = (sub.children || []).map(function (it) {
+          return '<label><input type="checkbox" class="form-check-input mk mk-child" value="' + it.key + '"> ' + esc(it.label) + '</label>';
+        }).join('');
+        return '<div class="menu-sub">' +
+          '<label class="menu-sub-title"><input type="checkbox" class="form-check-input mk mk-sub" value="' + sub.key + '"> ' + esc(sub.label) + '</label>' +
+          (itemsHtml ? '<div class="menu-sub-items">' + itemsHtml + '</div>' : '') +
+          '</div>';
+      }).join('');
+      return '<div class="menu-card" data-card="' + n.key + '">' +
+        '<div class="menu-card-head"><label><input type="checkbox" class="form-check-input mk mk-top" value="' + n.key + '"> ' + esc(n.label) + '</label>' +
+        (subs ? '<a href="javascript:void(0)" class="menu-all" data-all="' + n.key + '">全选</a>' : '') + '</div>' +
+        (subs ? '<div class="menu-card-body">' + subs + '</div>' : '') +
+        '</div>';
     }).join('');
   }
+  function cardOf(el) { return el.closest('.menu-card'); }
+  function syncCardTop(card) {
+    var top = card.querySelector('.mk-top');
+    var all = card.querySelectorAll('.mk-sub,.mk-child');
+    var on = Array.prototype.every.call(all, function (el) { return el.checked; });
+    if (top) top.checked = all.length > 0 ? on : top.checked;
+  }
+  function syncSub(sub) {
+    var kids = sub.querySelectorAll('.mk-child');
+    var t = sub.querySelector('.mk-sub');
+    if (t && kids.length) t.checked = Array.prototype.every.call(kids, function (el) { return el.checked; });
+  }
+  $('rTree').addEventListener('change', function (e) {
+    var el = e.target;
+    if (!el.classList.contains('mk')) return;
+    if (el.classList.contains('mk-top')) {
+      cardOf(el).querySelectorAll('.mk-sub,.mk-child').forEach(function (c) { c.checked = el.checked; });
+    } else if (el.classList.contains('mk-sub')) {
+      var sub = el.closest('.menu-sub');
+      sub.querySelectorAll('.mk-child').forEach(function (c) { c.checked = el.checked; });
+      syncCardTop(cardOf(el));
+    } else {
+      var sub2 = el.closest('.menu-sub');
+      if (sub2) { syncSub(sub2); syncCardTop(cardOf(el)); }
+    }
+  });
+  $('rTree').addEventListener('click', function (e) {
+    var a = e.target.closest('.menu-all');
+    if (!a) return;
+    var card = cardOf(a);
+    card.querySelectorAll('.mk').forEach(function (c) { c.checked = true; });
+  });
+  $('menuAllBtn').onclick = function () { document.querySelectorAll('#rTree .mk').forEach(function (c) { c.checked = true; }); };
+  $('menuNoneBtn').onclick = function () { document.querySelectorAll('#rTree .mk').forEach(function (c) { c.checked = false; }); };
+  $('menuSearch').addEventListener('input', function () {
+    var kw = this.value.trim().toLowerCase();
+    document.querySelectorAll('#rTree .menu-card').forEach(function (card) {
+      card.classList.toggle('card-hidden', !!kw && card.textContent.toLowerCase().indexOf(kw) < 0);
+    });
+  });
   function checkedMenus() {
     return Array.prototype.map.call(document.querySelectorAll('#rTree .mk:checked'), function (el) { return el.value; });
   }
+
+  /* ── 下拉填充 ── */
   function fillCustSelects() {
     var html = '<option value="">平台（无客户）</option>' + customers.map(function (c) {
       return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
     }).join('');
-    ['rCust', 'uCust'].forEach(function (id) { var el = document.getElementById(id); if (el) el.innerHTML = html; });
+    var el = $('uCust'); if (el) el.innerHTML = html;
   }
   function fillRoles() {
-    var el = document.getElementById('uRole');
+    var el = $('uRole');
     el.innerHTML = roles.map(function (r) {
-      return '<option value="' + esc(r.name) + '">' + esc(r.name) + (r.customer_id ? '' : '（平台）') + '</option>';
+      return '<option value="' + esc(r.name) + '">' + esc(r.name) + '</option>';
     }).join('');
   }
+
+  /* ── 用户表单 ── */
   function setPassVisible(show) {
-    var inp = document.getElementById('uPass');
-    var ico = document.getElementById('uPassToggle');
+    var inp = $('uPass'), ico = $('uPassToggle');
     if (!inp || !ico) return;
     inp.type = show ? 'text' : 'password';
     ico.classList.toggle('ti-eye', !!show);
@@ -125,47 +445,131 @@
   }
   function resetUserForm() {
     editUserId = 0;
-    document.getElementById('uEditId').value = '';
-    document.getElementById('uName').value = '';
-    document.getElementById('uName').readOnly = false;
-    document.getElementById('uPass').value = '';
-    document.getElementById('uPass').required = true;
-    document.getElementById('uPass').placeholder = '';
-    document.getElementById('uPassHint').textContent = '';
-    document.getElementById('uFirst').value = '';
-    document.getElementById('uLast').value = '';
-    if (document.getElementById('uRole').options.length) document.getElementById('uRole').selectedIndex = 0;
-    if (document.getElementById('uCust')) document.getElementById('uCust').value = '';
-    document.getElementById('uAdd').textContent = '新建用户';
-    document.getElementById('uAdd').classList.remove('btn-primary');
-    document.getElementById('uAdd').classList.add('btn-success');
-    document.getElementById('uCancel').style.display = 'none';
+    $('uEditId').value = '';
+    $('uName').value = ''; $('uName').readOnly = false;
+    $('uPass').value = ''; $('uPass').required = true; $('uPass').placeholder = '';
+    $('uPassHint').textContent = '';
+    $('uPassReq').style.display = '';
+    $('uFirst').value = ''; $('uLast').value = '';
+    if ($('uRole').options.length) $('uRole').selectedIndex = 0;
+    if ($('uCust')) $('uCust').value = '';
+    $('userModalTitle').textContent = '新建用户';
+    $('uSave').textContent = '保存';
     setPassVisible(false);
   }
   function loadUserToForm(u) {
     editUserId = +u.id;
-    document.getElementById('uEditId').value = String(u.id);
-    document.getElementById('uName').value = u.username || '';
-    document.getElementById('uName').readOnly = true;
-    document.getElementById('uPass').value = '';
-    document.getElementById('uPass').required = false;
-    document.getElementById('uPass').placeholder = '留空则不修改密码';
-    document.getElementById('uPassHint').textContent = '（留空保持原密码）';
-    document.getElementById('uFirst').value = u.firstname || '';
-    document.getElementById('uLast').value = u.lastname || '';
+    $('uEditId').value = String(u.id);
+    $('uName').value = u.username || ''; $('uName').readOnly = true;
+    $('uPass').value = ''; $('uPass').required = false; $('uPass').placeholder = '留空则不修改密码';
+    $('uPassHint').textContent = '（留空保持原密码）';
+    $('uPassReq').style.display = 'none';
+    $('uFirst').value = u.firstname || '';
+    $('uLast').value = u.lastname || '';
     var roleName = (u.roles && u.roles[0]) || '';
-    document.getElementById('uRole').value = roleName;
-    if (document.getElementById('uCust')) {
-      document.getElementById('uCust').value = u.customer_id ? String(u.customer_id) : '';
-    }
-    document.getElementById('uAdd').textContent = '保存修改';
-    document.getElementById('uAdd').classList.remove('btn-success');
-    document.getElementById('uAdd').classList.add('btn-primary');
-    document.getElementById('uCancel').style.display = '';
+    $('uRole').value = roleName;
+    if ($('uCust')) $('uCust').value = u.customer_id ? String(u.customer_id) : '';
+    $('userModalTitle').textContent = '编辑用户：' + (u.username || '');
+    $('uSave').textContent = '保存修改';
     setPassVisible(false);
-    document.getElementById('uFirst').focus();
-    try { document.getElementById('uForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+    openModal('userModal');
   }
+  $('uPassToggle').addEventListener('click', function () { setPassVisible($('uPass').type === 'password'); });
+  $('uPassToggle').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setPassVisible($('uPass').type === 'password');
+    }
+  });
+
+  function saveUser() {
+    var role = $('uRole').value;
+    var username = ($('uName').value || '').trim();
+    var password = $('uPass').value || '';
+    var firstname = $('uFirst').value || '';
+    var lastname = $('uLast').value || '';
+    var customerId = $('uCust') ? $('uCust').value : '';
+    if (!username) { toast('请填写用户名', 'err'); return; }
+    if (!editUserId && !password) { toast('新建用户必须设置密码', 'err'); return; }
+
+    var payload = { username: username, firstname: firstname, lastname: lastname, roles: role ? [role] : [], domains: [] };
+    if (password) payload.password = password;
+
+    var chain;
+    if (editUserId) {
+      if (!payload.password) payload.password = '';
+      chain = req(API + 'auth/user/' + editUserId, 'PUT', payload).then(function () {
+        return req(API + 'acl/users/assign', 'POST', { id: editUserId, roles: role ? [role] : [], customer_id: customerId });
+      });
+    } else {
+      chain = req(API + 'auth/user', 'POST', payload).then(function () {
+        return req(API + 'acl/users');
+      }).then(function (j) {
+        var found = (j.data || []).filter(function (u) { return u.username === username; })[0];
+        if (!found) return;
+        return req(API + 'acl/users/assign', 'POST', { id: found.id, roles: role ? [role] : [], customer_id: customerId });
+      });
+    }
+    chain.then(function () {
+      closeModal('userModal');
+      toast(editUserId ? '用户已保存' : '用户已创建');
+      resetUserForm();
+      return load();
+    }).catch(function (e) { toast(e.message || e, 'err'); });
+  }
+  $('uSave').onclick = saveUser;
+  $('uCancel').onclick = function () { if (editUserId) resetUserForm(); };
+
+  /* ── 客户模态框 ── */
+  function openCustomerModal(c) {
+    editingCustId = c ? c.id : 0;
+    $('cName').value = c ? (c.name || '') : '';
+    $('cCode').value = c ? (c.code || '') : '';
+    $('cDomain').value = c ? (c.domain || '') : '';
+    $('cNote').value = c ? (c.note || '') : '';
+    $('custModalTitle').textContent = c ? '编辑客户' : '新建客户';
+    openModal('custModal');
+  }
+  $('cSave').onclick = function () {
+    var body = { name: $('cName').value, code: $('cCode').value, domain: $('cDomain').value, note: $('cNote').value };
+    var p = editingCustId ? req(API + 'acl/customers/' + editingCustId, 'POST', body) : req(API + 'acl/customers', 'POST', body);
+    p.then(function () {
+      closeModal('custModal');
+      toast(editingCustId ? '客户已保存' : '客户已创建');
+      editingCustId = 0;
+      return load();
+    }).catch(function (e) { toast(e.message || e, 'err'); });
+  };
+
+  /* ── 角色模态框 ── */
+  function openRoleModal(r) {
+    editingRoleId = r ? r.id : 0;
+    $('rName').value = r ? (r.name || '') : '';
+    $('rSuper').checked = r ? !!r.is_super : false;
+    var menus = (r ? (r.menus || []) : []).slice();
+    var ufiTabs = ['biz.ufi.overview', 'biz.ufi.devices', 'biz.ufi.commands', 'biz.ufi.records', 'biz.ufi.devlogs'];
+    if (menus.indexOf('biz.ufi') >= 0 && !ufiTabs.some(function (k) { return menus.indexOf(k) >= 0; })) {
+      menus = menus.concat(ufiTabs);
+    }
+    document.querySelectorAll('#rTree .mk').forEach(function (el) {
+      el.checked = menus.indexOf(el.value) >= 0;
+    });
+    $('roleModalTitle').textContent = r ? '编辑角色：' + (r.name || '') : '新建角色';
+    openModal('roleModal');
+  }
+  $('rSave').onclick = function () {
+    if (!$('rName').value.trim()) { toast('请填写角色名', 'err'); return; }
+    var payload = { name: $('rName').value, is_super: $('rSuper').checked ? 1 : 0, menus: checkedMenus(), enabled: 1 };
+    var p = editingRoleId ? req(API + 'acl/roles/' + editingRoleId, 'POST', payload) : req(API + 'acl/roles', 'POST', payload);
+    p.then(function () {
+      closeModal('roleModal');
+      toast(editingRoleId ? '角色已保存' : '角色已创建');
+      editingRoleId = 0;
+      return load();
+    }).catch(function (e) { toast(e.message || e, 'err'); });
+  };
+
+  /* ── 主加载 ── */
   function load() {
     return Promise.all([
       req(API + 'acl/catalog'),
@@ -174,140 +578,192 @@
       req(API + 'acl/users')
     ]).then(function (all) {
       tree = (all[0].data && all[0].data[0] && all[0].data[0].tree) || [];
-      document.getElementById('rTree').innerHTML = renderTree(tree, 0);
+      if (!$('rTree').hasChildNodes()) $('rTree').innerHTML = renderMenuEditor(tree);
       customers = all[1].data || [];
       roles = all[2].data || [];
       users = all[3].data || [];
+      $('statCust').textContent = customers.length;
+      $('statRole').textContent = roles.length;
+      $('statUser').textContent = users.length;
       fillCustSelects();
       fillRoles();
+
       document.querySelector('#cTable tbody').innerHTML = customers.map(function (c) {
-        return '<tr><td>' + esc(c.name) + '</td><td>' + esc(c.code || '') + '</td><td>' + c.users + '</td><td>' + esc(c.note || '') + '</td><td>' + (c.enabled ? '启用' : '停用') + '</td><td><button class="btn btn-sm btn-danger" data-delc="' + c.id + '">删除</button></td></tr>';
-      }).join('') || '<tr><td colspan="6">暂无客户</td></tr>';
+        var isDefault = (c.code || '') === 'default';
+        var ops = platform
+          ? '<div class="acl-actions">' +
+            '<button class="btn acl-btn acl-btn-ghost" data-imp="' + c.id + '" type="button">导入</button>' +
+            '<button class="btn acl-btn acl-btn-ghost" data-edc="' + c.id + '" type="button">编辑</button>' +
+            (isDefault ? '' :
+              '<div class="form-check form-switch" style="margin:0 6px 0 0;align-self:center">' +
+              '<input class="form-check-input" type="checkbox" role="switch" data-tgc="' + c.id + '"' + (c.enabled ? ' checked' : '') + ' title="启用/停用"></div>' +
+              '<button class="btn acl-btn acl-btn-danger-ghost" data-delc="' + c.id + '" type="button">删除</button>') +
+            '</div>'
+          : '<span class="text-muted" style="font-size:12.5px">—</span>';
+        return '<tr>' +
+          '<td><span class="row-name">' + esc(c.name) + '</span>' + (isDefault ? ' <span class="badge-soft sys">系统</span>' : '') + '</td>' +
+          '<td>' + esc(c.code || '') + '</td>' +
+          '<td class="text-center">' + c.users + '</td>' +
+          '<td>' + esc(c.note || '') + '</td>' +
+          '<td><span class="badge-soft ' + (c.enabled ? 'on' : 'off') + '">' + (c.enabled ? '启用' : '停用') + '</span></td>' +
+          '<td>' + ops + '</td></tr>';
+      }).join('') || '<tr><td colspan="6" class="acl-empty">暂无客户，点击右上角「新建客户」创建</td></tr>';
+
       document.querySelector('#rTable tbody').innerHTML = roles.map(function (r) {
-        var cn = '平台';
-        customers.forEach(function (c) { if (c.id === r.customer_id) cn = c.name; });
-        return '<tr><td>' + esc(r.name) + '</td><td>' + esc(cn) + '</td><td>' + (r.is_super ? '是' : '否') + '</td><td>' + (r.menus || []).length + '</td><td>' +
-          '<button class="btn btn-sm btn-primary" data-edr="' + r.id + '">载入菜单</button> ' +
-          '<button class="btn btn-sm btn-danger" data-delr="' + r.id + '">删除</button></td></tr>';
-      }).join('');
+        return '<tr>' +
+          '<td><span class="row-name">' + esc(r.name) + '</span>' + (r.is_super ? ' <span class="badge-soft super">超级</span>' : '') + '</td>' +
+          '<td class="text-center">' + (r.menus || []).length + '</td>' +
+          '<td><div class="acl-actions">' +
+          '<button class="btn acl-btn acl-btn-ghost" data-edr="' + r.id + '" type="button">编辑</button>' +
+          '<button class="btn acl-btn acl-btn-danger-ghost" data-delr="' + r.id + '" type="button">删除</button></div></td></tr>';
+      }).join('') || '<tr><td colspan="3" class="acl-empty">暂无角色</td></tr>';
+
       document.querySelector('#uTable tbody').innerHTML = users.map(function (u) {
-        return '<tr><td>' + esc(u.username) + '</td><td>' + esc((u.firstname || '') + ' ' + (u.lastname || '')) + '</td><td>' + esc(u.customer_name || '平台') + '</td><td>' + esc((u.roles || []).join(', ')) + '</td><td>' +
-          '<button class="btn btn-sm btn-primary" data-edu="' + u.id + '" type="button">编辑</button> ' +
-          '<button class="btn btn-sm btn-danger" data-delu="' + u.id + '" type="button">删除</button></td></tr>';
-      }).join('') || '<tr><td colspan="5">暂无用户</td></tr>';
-    }).catch(function (e) { alert(e.message || e); });
+        return '<tr>' +
+          '<td><span class="row-name">' + esc(u.username) + '</span></td>' +
+          '<td>' + esc(((u.firstname || '') + ' ' + (u.lastname || '')).trim()) + '</td>' +
+          '<td>' + (u.customer_name ? esc(u.customer_name) : '<span class="badge-soft plat">平台</span>') + '</td>' +
+          '<td>' + esc((u.roles || []).join(', ')) + '</td>' +
+          '<td><div class="acl-actions">' +
+          '<button class="btn acl-btn acl-btn-ghost" data-edu="' + u.id + '" type="button">编辑</button>' +
+          '<button class="btn acl-btn acl-btn-danger-ghost" data-delu="' + u.id + '" type="button">删除</button></div></td></tr>';
+      }).join('') || '<tr><td colspan="5" class="acl-empty">暂无用户</td></tr>';
+    }).catch(function (e) { toast(e.message || e, 'err'); });
   }
-  document.getElementById('cAdd').onclick = function () {
-    req(API + 'acl/customers', 'POST', { name: document.getElementById('cName').value, code: document.getElementById('cCode').value, note: document.getElementById('cNote').value }).then(load);
-  };
-  document.getElementById('rAdd').onclick = function () {
-    req(API + 'acl/roles', 'POST', {
-      name: document.getElementById('rName').value,
-      customer_id: document.getElementById('rCust').value,
-      is_super: document.getElementById('rSuper').checked,
-      menus: checkedMenus()
-    }).then(load);
-  };
-  function saveUser() {
-    var role = document.getElementById('uRole').value;
-    var username = (document.getElementById('uName').value || '').trim();
-    var password = document.getElementById('uPass').value || '';
-    var firstname = document.getElementById('uFirst').value || '';
-    var lastname = document.getElementById('uLast').value || '';
-    var customerId = document.getElementById('uCust') ? document.getElementById('uCust').value : '';
-    if (!username) { alert('请填写用户名'); return; }
-    if (!editUserId && !password) { alert('新建用户必须设置密码'); return; }
 
-    var payload = {
-      username: username,
-      firstname: firstname,
-      lastname: lastname,
-      roles: role ? [role] : [],
-      domains: []
-    };
-    if (password) payload.password = password;
-
-    var chain;
-    if (editUserId) {
-      if (!payload.password) payload.password = '';
-      chain = req(API + 'auth/user/' + editUserId, 'PUT', payload).then(function () {
-        return req(API + 'acl/users/assign', 'POST', {
-          id: editUserId,
-          roles: role ? [role] : [],
-          customer_id: customerId
-        });
-      });
-    } else {
-      chain = req(API + 'auth/user', 'POST', payload).then(function () {
-        return req(API + 'acl/users');
-      }).then(function (j) {
-        var found = (j.data || []).filter(function (u) { return u.username === username; })[0];
-        if (!found) return;
-        return req(API + 'acl/users/assign', 'POST', {
-          id: found.id,
-          roles: role ? [role] : [],
-          customer_id: customerId
-        });
-      });
-    }
-    chain.then(function () { resetUserForm(); return load(); }).catch(function (e) { alert(e.message || e); });
+  /* ── 工具栏新建 ── */
+  $('cNew').onclick = function () { openCustomerModal(null); };
+  $('cPool').onclick = function () { openPool(); };
+  $('cMove').onclick = function () { openMove(); };
+  function custName(id) {
+    var hit = customers.filter(function (c) { return String(c.id) === String(id); })[0];
+    return hit ? hit.name : (id ? ('#' + id) : '待认领');
   }
-  document.getElementById('uAdd').onclick = saveUser;
-  document.getElementById('uCancel').onclick = resetUserForm;
-  document.getElementById('uPassToggle').addEventListener('click', function () {
-    setPassVisible(document.getElementById('uPass').type === 'password');
-  });
-  document.getElementById('uPassToggle').addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      setPassVisible(document.getElementById('uPass').type === 'password');
-    }
-  });
+  function openMove() {
+    req(API + 'ufi/devices').then(function (j) {
+      var rows = j.data || [];
+      document.querySelector('#moveTable tbody').innerHTML = rows.map(function (d) {
+        var opts = customers.map(function (c) {
+          var cur = String(c.id) === String(d.customer_id || '');
+          return '<option value="' + c.id + '"' + (cur ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+        }).join('');
+        return '<tr><td>' + esc(d.imei) + '</td><td>' + esc(custName(d.customer_id)) + '</td>' +
+          '<td><select class="form-select form-select-sm move-cust" data-imei="' + esc(d.imei) + '">' + opts + '</select> ' +
+          '<button class="btn acl-btn acl-btn-primary" data-move="' + esc(d.imei) + '" type="button">转移</button></td></tr>';
+      }).join('') || '<tr><td colspan="3" class="acl-empty">没有设备</td></tr>';
+      openModal('moveModal');
+    }).catch(function (e) { toast(e.message || e, 'err'); });
+  }
+  $('importSave').onclick = function () {
+    var cid = $('importCid').value;
+    req(API + 'acl/customers/' + cid + '/import', 'POST', { text: $('importText').value }).then(function (j) {
+      var d = (j.data && j.data[0]) || {};
+      closeModal('importModal');
+      toast('新增 ' + ((d.created || []).length) + '，更新 ' + ((d.updated || []).length) + '，失败 ' + ((d.errors || []).length));
+    }).catch(function (e) { toast(e.message || e, 'err'); });
+  };
+  function openPool() {
+    req(API + 'ufi/devices/unclaimed').then(function (j) {
+      var rows = j.data || [];
+      var opts = customers.map(function (c) {
+        return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+      }).join('');
+      document.querySelector('#poolTable tbody').innerHTML = rows.map(function (d) {
+        return '<tr><td>' + esc(d.imei) + '</td><td>' + esc(d.sim_number || '') + '</td><td>' + esc(d.last_seen || '') + '</td>' +
+          '<td><select class="form-select form-select-sm pool-cust" data-imei="' + esc(d.imei) + '">' + opts + '</select> ' +
+          '<button class="btn acl-btn acl-btn-primary" data-claim="' + esc(d.imei) + '" type="button">认领</button></td></tr>';
+      }).join('') || '<tr><td colspan="4" class="acl-empty">没有待认领设备</td></tr>';
+      openModal('poolModal');
+    }).catch(function (e) { toast(e.message || e, 'err'); });
+  }
+  $('rNew').onclick = function () { openRoleModal(null); };
+  $('uNew').onclick = function () { resetUserForm(); openModal('userModal'); };
+
+  /* ── 行内操作（事件委托） ── */
   document.body.addEventListener('click', function (e) {
-    var t = e.target.closest('[data-delc],[data-delr],[data-delu],[data-edu],[data-edr]');
+    var t = e.target.closest('[data-delc],[data-delr],[data-delu],[data-edu],[data-edr],[data-edc],[data-tgc],[data-imp],[data-claim],[data-move]');
     if (!t) return;
-    if (t.getAttribute('data-delc')) req(API + 'acl/customers/' + t.getAttribute('data-delc'), 'DELETE').then(load);
-    if (t.getAttribute('data-delr')) req(API + 'acl/roles/' + t.getAttribute('data-delr'), 'DELETE').then(load);
+
+    if (t.getAttribute('data-imp')) {
+      var icid = t.getAttribute('data-imp');
+      var ic = customers.filter(function (c) { return String(c.id) === String(icid); })[0];
+      $('importCid').value = icid;
+      $('importText').value = '';
+      $('importTitle').textContent = '导入设备到「' + ((ic && ic.name) || '') + '」';
+      openModal('importModal');
+    }
+    if (t.getAttribute('data-move')) {
+      var mimei = t.getAttribute('data-move');
+      var msel = document.querySelector('.move-cust[data-imei="' + mimei + '"]');
+      var mcid = msel ? msel.value : '';
+      if (!mcid) { toast('请选择客户', 'err'); return; }
+      req(API + 'ufi/devices/' + encodeURIComponent(mimei) + '/claim', 'POST', { customer_id: +mcid })
+        .then(function () { toast('已转移到 ' + custName(mcid)); return openMove(); })
+        .catch(function (err) { toast(err.message || err, 'err'); });
+    }
+    if (t.getAttribute('data-claim')) {
+      var imei = t.getAttribute('data-claim');
+      var sel = document.querySelector('.pool-cust[data-imei="' + imei + '"]');
+      var pcid = sel ? sel.value : '';
+      if (!pcid) { toast('请选择客户', 'err'); return; }
+      req(API + 'ufi/devices/' + encodeURIComponent(imei) + '/claim', 'POST', { customer_id: +pcid })
+        .then(function () { toast('已认领'); return openPool(); })
+        .catch(function (err) { toast(err.message || err, 'err'); });
+    }
+    if (t.getAttribute('data-edc')) {
+      var cid = +t.getAttribute('data-edc');
+      var cust = customers.filter(function (c) { return +c.id === cid; })[0];
+      if (cust) openCustomerModal(cust);
+    }
+    if (t.getAttribute('data-tgc')) {
+      var tid = +t.getAttribute('data-tgc');
+      var tc = customers.filter(function (c) { return +c.id === tid; })[0];
+      if (!tc) return;
+      var to = t.checked ? 1 : 0;
+      if (!window.confirm('确认' + (to ? '启用' : '停用') + '客户「' + (tc.name || '') + '」？')) { t.checked = !to; return; }
+      req(API + 'acl/customers/' + tid, 'POST', { name: tc.name, code: tc.code, note: tc.note, enabled: to })
+        .then(function () { toast(to ? '已启用' : '已停用'); return load(); })
+        .catch(function (err) { toast(err.message || err, 'err'); t.checked = !to; });
+    }
+    if (t.getAttribute('data-delc')) {
+      var did = +t.getAttribute('data-delc');
+      var dc = customers.filter(function (c) { return +c.id === did; })[0];
+      if (!dc) return;
+      if (!window.confirm('确认删除客户「' + (dc.name || '') + '」？\n' + (dc.users || 0) + ' 个用户将解除归属，' + (dc.devices || 0) + ' 台设备回到待认领，对应 SIP 账号一并删除。')) return;
+      req(API + 'acl/customers/' + did, 'DELETE')
+        .then(function () { toast('客户已删除'); return load(); })
+        .catch(function (err) { toast(err.message || err, 'err'); });
+    }
+    if (t.getAttribute('data-delr')) {
+      var rid = +t.getAttribute('data-delr');
+      var dr = roles.filter(function (r) { return +r.id === rid; })[0];
+      if (!dr) return;
+      if (!window.confirm('确认删除角色「' + (dr.name || '') + '」？')) return;
+      req(API + 'acl/roles/' + rid, 'DELETE')
+        .then(function () { toast('角色已删除'); return load(); })
+        .catch(function (err) { toast(err.message || err, 'err'); });
+    }
     if (t.getAttribute('data-delu')) {
-      if (!confirm('确认删除该用户？')) return;
-      req(API + 'auth/user/' + t.getAttribute('data-delu'), 'DELETE').then(function () {
-        if (editUserId === +t.getAttribute('data-delu')) resetUserForm();
+      var uid = +t.getAttribute('data-delu');
+      if (!window.confirm('确认删除该用户？')) return;
+      req(API + 'auth/user/' + uid, 'DELETE').then(function () {
+        if (editUserId === uid) { closeModal('userModal'); resetUserForm(); }
+        toast('用户已删除');
         return load();
-      });
+      }).catch(function (err) { toast(err.message || err, 'err'); });
     }
     if (t.getAttribute('data-edu')) {
-      var uid = +t.getAttribute('data-edu');
-      var user = users.filter(function (u) { return +u.id === uid; })[0];
-      if (!user) return;
-      /* 切到用户账户页签再载入表单 */
-      document.querySelectorAll('#aclTabs a').forEach(function (x) {
-        x.classList.toggle('active', x.getAttribute('data-pane') === 'user');
-      });
-      document.querySelectorAll('.acl-pane').forEach(function (p) { p.style.display = 'none'; });
-      document.getElementById('pane-user').style.display = 'block';
-      loadUserToForm(user);
+      var eid = +t.getAttribute('data-edu');
+      var user = users.filter(function (u) { return +u.id === eid; })[0];
+      if (user) loadUserToForm(user);
     }
     if (t.getAttribute('data-edr')) {
-      var id = +t.getAttribute('data-edr');
-      var role = roles.filter(function (r) { return r.id === id; })[0];
-      if (!role) return;
-      document.getElementById('rName').value = role.name;
-      document.querySelectorAll('#rTree .mk').forEach(function (el) {
-        el.checked = (role.menus || []).indexOf(el.value) >= 0;
-      });
-      document.getElementById('rSuper').checked = !!role.is_super;
-      var btn = document.getElementById('rAdd');
-      btn.textContent = '保存角色';
-      btn.onclick = function () {
-        req(API + 'acl/roles/' + id, 'POST', {
-          name: document.getElementById('rName').value,
-          is_super: document.getElementById('rSuper').checked,
-          menus: checkedMenus(),
-          enabled: 1
-        }).then(function () { btn.textContent = '新建角色'; load(); });
-      };
+      var rid2 = +t.getAttribute('data-edr');
+      var role = roles.filter(function (r) { return +r.id === rid2; })[0];
+      if (role) openRoleModal(role);
     }
   });
+
   load();
 })();
 </script>

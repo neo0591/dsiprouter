@@ -21,7 +21,7 @@
   top: 0;
   z-index: 20;
 }
-.ufi-tab {
+.ufi-view-tabs .ufi-tab {
   appearance: none;
   border: 0;
   background: transparent;
@@ -32,13 +32,15 @@
   padding: 8px 12px;
   border-radius: 6px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
 }
-.ufi-tab:hover { color: #fff; background: #333; }
-.ufi-tab.is-active {
+.ufi-view-tabs .ufi-tab:hover { color: #fff; background: #333; }
+.ufi-view-tabs .ufi-tab.is-active {
   background: #F0AD4E;
   color: #24170a;
 }
-.ufi-tab .tab-count {
+.ufi-view-tabs .tab-count {
   display: inline-block;
   margin-left: 6px;
   min-width: 1.4em;
@@ -47,9 +49,10 @@
   background: rgba(255,255,255,.12);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+  color: inherit;
 }
-.ufi-tab.is-active .tab-count { background: rgba(36,23,10,.18); }
-.ufi-tab .tab-count.is-alert { background: #e03131; color: #fff; }
+.ufi-view-tabs .ufi-tab.is-active .tab-count { background: rgba(36,23,10,.18); color: #24170a; }
+.ufi-view-tabs .ufi-tab .tab-count.is-alert { background: #e03131; color: #fff; }
 .ufi-view-tabs__meta {
   margin-left: auto;
   display: flex;
@@ -93,3 +96,34 @@
   border-radius: 6px;
   padding: 0 8px;
 }
+
+/* ── 列表可选中复制：单元格文本可选；操作/勾选列除外 ── */
+.ufi-console table.grid tbody td {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+.ufi-console table.grid tbody td.col-check,
+.ufi-console table.grid tbody td.col-actions,
+.ufi-console table.grid tbody td.col-act,
+.ufi-console table.grid tbody td.col-check *,
+.ufi-console table.grid tbody td.col-actions *,
+.ufi-console table.grid tbody td.col-act * {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+.ufi-console table.grid tbody td.col-actions button,
+.ufi-console table.grid tbody td.col-act button { cursor: pointer; }
+.ufi-console .cell-imei,
+.ufi-console .mono-sm,
+.ufi-console .copyable,
+.ufi-console td.mono {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+.ufi-console .copyable:hover,
+.ufi-console .cell-imei:hover { background: rgba(240, 173, 78, .12); border-radius: 3px; }
+.ufi-console .alert-sms,
+.ufi-console .drawer .mono { -webkit-user-select: text; user-select: text; }

@@ -138,3 +138,28 @@ html, body {
   padding: 0 7px;
   font-size: 12px;
 }
+
+/* ── 列表可选中复制 ── */
+.ufi-callcenter table.grid tbody td {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+.ufi-callcenter table.grid tbody td.col-act,
+.ufi-callcenter table.grid tbody td.col-check,
+.ufi-callcenter table.grid tbody td.col-act *,
+.ufi-callcenter table.grid tbody td.col-check * {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+.ufi-callcenter table.grid tbody td.col-act button { cursor: pointer; }
+.ufi-callcenter .mono,
+.ufi-callcenter .copyable,
+.ufi-callcenter .io-imei {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+.ufi-callcenter .copyable:hover,
+.ufi-callcenter .io-imei:hover { background: rgba(240, 173, 78, .12); border-radius: 3px; }

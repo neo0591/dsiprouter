@@ -199,18 +199,210 @@ T01 ──> T02 ──> T05 ──> T06 ──> T07 ──> T08
 
 ---
 
-## 六、待明确事项（v2 收敛）
+## 六、待明确事项（v2 收敛）→ 已全部拍板（2026-10-19）
 
-| # | 开放问题 | 影响 |
+| # | 开放问题 | 拍板结论 | 设计影响 |
+|---|---|---|---|
+| 1 | 租户规模与增速 | **1~20 个** | 小规模确认：逻辑隔离（共享实例）完全够用，物理隔离彻底排除；`scoped_imei` 反查性能压力小 |
+| 2 | 是否自助开通 | **不自助开通；设备尽量即插即用、少配置** | 不做审批流；设备自注册自动落默认租户是主路径，平台管理员建客户后导入/自注册即用 |
+| 3 | DID 是否租户独享 | **独享** | `dsip_ufi_pool_did` 唯一键必须加 customer_id：`uk_did(did, customer_id)` |
+| 4 | UFI 是否支持自定义 domain/Realm | **支持** | 第二期 domain 隔离确认可行，T06~T08 可推进 |
+| 5 | 历史 `dsip_admin` 归属 | **归属默认租户** | 迁移脚本回填 `dsip_user.customer_id=默认租户`；`resolve_acl` 历史账号分支按此处理 |
+| 6 | CDR 严格隔离方式 | 维持 v2 方案：主用 gwgroupid→dr_gw_lists.customer_id，src 反查仅 inbound 兜底 | 不给 acc/cdrs 表加列 |
+| 7 | dispatcher/address/mapping | 维持平台级全局（第一、二期均不动） | 规模小，收益低 |
+| 8 | 设备改租户时 domain 同步 | 维持 v2 默认预期：第一期不同步；第二期提供迁移脚本+开关 | — |
+
+---
+
+## v3 优化（即插即用归属模型）—— 2026-10-19
+
+> **结论先行（v3）**：把「设备即插即用、少配置」从拍板表内化为归属机制——**「批量导入 + IMEI 反查自动归属」为主路径，「待认领池」兜底**。核心增量：①新增预置表 `dsip_ufi_import`，设备自注册时按 IMEI（SIM 兜底）反查自动落 `customer_id`，设备侧零配置；②未匹配的**新**设备不再落默认租户，改落**待认领池**（`customer_id=NULL` + `claim_status=0`），由平台管理员认领/改租户，堵住「所有即插即用设备都落默认租户→多租户形同虚设」的漏洞；③待认领设备**不自动开通 SIP 账号**，认领后才 provision；④第二期 UFI 自定义 domain 随归属下发，租户未配 domain 时继承全局 domain 无感过渡；⑤新增 5 个**平台管理员专属**端点（导入/预置清单/待认领池/认领），全部 `is_platform_admin()` 门禁，租户不可达，`require_owned_imei`/`scoped_imei` 零改动即可覆盖。
+> 一句话：**预置导入定归属、自注册反查落租户、未匹配进待认领、认领后才开通。**
+
+### v3.0 现状核验（代码已到 v2，v3 为纯增量）
+
+抽查确认：v2 大部分已落码——`acl.py` 已有默认租户 seed（`code='default'` + `INSERT IGNORE`）、`domain` 列、`backfill_tenants`（`mt_backfill_v2` 门）、`require_owned_imei`/`scoped_imei`/`tenant_gwgroup_ids`/`assert_gwgroup`、`stamp_customer()` 平台管理员已返回默认租户 id（非 NULL）；`ufi_device.py` 的 `_upsert_device` 已含 `customer_id` 列且 `ON DUPLICATE KEY` 用 `IF(customer_id IS NULL, :customer_id, customer_id)` 保留既有归属。因此 **v3 只做增量**：把自注册的 `customer_id` 来源从 `default_customer_id()` 换成「预置表反查结果」，并补齐导入/待认领/认领三块。
+
+### v3.1 与 v2 的差异对照
+
+| # | v2 行为 | v3 变更 | 落点 |
+|---|---|---|---|
+| 1 | 设备自注册一律 `customer_id=默认租户` | 按预置表反查归属；未匹配落**待认领池**（NULL） | `_upsert_device` |
+| 2 | 无预置表 | 新增 `dsip_ufi_import`（IMEI/SIM→customer） | `ensure_acl_tables` |
+| 3 | 无待认领概念 | `dsip_ufi_device.claim_status`（0待认领/1已归属）+ 待认领池 | `_ensure_ufi_tables` + 新端点 |
+| 4 | `auto_provision` 对所有自注册设备建 SIP 账号 | 仅**已归属**设备 provision；待认领不建账号 | `_handle_sip_setting` 重排 |
+| 5 | 无导入/认领端点 | 新增 5 个平台管理员专属端点 | `acl.py`/`ufi_device.py` |
+| 6 | domain 第二期随租户（已拍板） | domain 第二期随归属下发；`domain=NULL` 继承全局 | `_tenant_domain()` |
+
+### v3.2 即插即用归属模型（拍板：方案 1 + 方案 3）
+
+**决策**：主路径 = 方案 1「批量导入 + IMEI 反查自动匹配」（设备侧零配置，管理员只做一次导入）；兜底 = 方案 3「待认领池」。方案 2「出厂预置 domain」不承担第一期归属，只作为第二期 domain 隔离的载体（见 v3.4）。
+
+#### 新增数据模型
+
+`dsip_ufi_import`（设备归属预置表，平台管理员专属）：
+```sql
+CREATE TABLE dsip_ufi_import (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  customer_id INT UNSIGNED NOT NULL,
+  imei VARCHAR(32) NOT NULL DEFAULT '',
+  sim VARCHAR(32) NOT NULL DEFAULT '',
+  matched TINYINT NOT NULL DEFAULT 0,      -- 0=未注册(待匹配) 1=已匹配
+  note VARCHAR(255) NOT NULL DEFAULT '',
+  created DATETIME NOT NULL,
+  matched_at DATETIME NULL,
+  UNIQUE KEY uk_import_imei (imei),        -- IMEI 全局唯一，防多租户抢占
+  KEY idx_import_sim (sim),
+  KEY idx_import_customer (customer_id, matched)
+)
+```
+
+`dsip_ufi_device` 增列：
+```sql
+ALTER TABLE dsip_ufi_device ADD COLUMN claim_status TINYINT NOT NULL DEFAULT 0;  -- 0=待认领 1=已归属
+```
+（`customer_id` 已存在；待认领 = `customer_id IS NULL AND claim_status=0`）
+
+#### 归属决策函数（新增，`acl.py`）
+
+`resolve_device_customer(db, imei, sim) -> int|None`：
+1. `SELECT customer_id FROM dsip_ufi_import WHERE imei=:imei`（精确，IMEI 为主键身份）；
+2. 未命中则 `WHERE sim=:sim`（SIM 兜底，best-effort；SIM 可换卡，故仅兜底不权威）；
+3. 命中则置 `matched=1, matched_at=NOW()` 并返回 `customer_id`；均未命中返回 `None`。
+
+#### 自注册代码路径改动（`ufi_device.py`）
+
+- `_upsert_device()`（原 339-343）：`values['customer_id'] = default_customer_id(db)` → `values['customer_id'] = resolve_device_customer(db, imei, sim)`；`values['claim_status'] = 1 if values['customer_id'] is not None else 0`；INSERT 列清单与 `ON DUPLICATE KEY` 同步加 `claim_status`，`customer_id` 的更新仍维持 `IF(customer_id IS NULL, :customer_id, customer_id)`（**已认领设备不被预置/自注册二次改写**）。
+- `_handle_sip_setting()`（原 867-878）：**先 resolve 归属，再决定是否 provision**——已归属才 `_upsert_ufi_account(db, imei, sim, tenant_domain)` + `provisioned=1`；待认领跳过账号、`provisioned=0`（设备拿到响应但无 SIP 凭证，等待认领）。
+- `_handle_get_url`/`_handle_status_push`/`persist_ufi_payload`：仅 `_upsert_device`，天然复用 resolve，无需额外改动。
+
+#### 归属决策时序
+
+```mermaid
+sequenceDiagram
+    participant D as UFI设备
+    participant U as ufi_device.py
+    participant A as acl
+    participant DB as MySQL
+    D->>U: POST /api/ufi/sip-setting (imei, sim, sign)
+    U->>A: resolve_device_customer(imei, sim)
+    A->>DB: SELECT customer_id FROM dsip_ufi_import WHERE imei=:imei (fallback sim)
+    alt 命中预置
+        A-->>U: customer_id=X
+        U->>DB: INSERT subscriber (imei, tenant_domain) ON DUPLICATE KEY
+        U->>DB: UPSERT dsip_ufi_device (customer_id=X, claim_status=1)
+        U-->>D: 下发 SIP 账号 + domain
+    else 未命中
+        A-->>U: None
+        U->>DB: UPSERT dsip_ufi_device (customer_id=NULL, claim_status=0)
+        U-->>D: 无 SIP 账号（待认领）
+    end
+```
+
+### v3.3 极简开通流程（端到端 ≤3 步）
+
+| 步 | 操作 | 执行人 | 界面/接口 | 说明 |
+|---|---|---|---|---|
+| 1 | 建客户（+可选建用户/角色） | 平台管理员 | 已有「客户与权限」页 | 复用 v2 现有能力，零新增 |
+| 2 | 批量导入该客户 IMEI/SIM 清单 | 平台管理员 | 新增「导入设备清单」（粘贴/文件） | 写 `dsip_ufi_import`（matched=0） |
+| 3 | 设备上电自注册 | 设备（无人值守） | 设备侧零配置 | 按 IMEI 反查自动落 `customer_id` 并开通 SIP 账号 |
+
+- 目标「≤3 步」达成：管理员只需 2 次点击/粘贴，设备端 0 配置。
+- 可选第 0 步：若出厂前已知 IMEI，可在设备发货前完成步骤 2，设备到货上电即用。
+
+### v3.4 domain 与即插即用结合（第二期）
+
+- **何时下发**：第二期 `_handle_sip_setting` 在 resolve 得到 `customer_id` 后，取 `tenant_domain = _tenant_domain(customer_id)`，`_upsert_ufi_account(db, imei, sim, tenant_domain)`，并在下发响应中新增 `sipDomain/realm = tenant_domain` 字段（沿 ufi-hub 现有下发通道）。
+- **过渡关系**：`_tenant_domain(customer_id)` = `dsip_customer.domain` 若为空则回退 `_ufi_auth_domain()`（全局 EXTERNAL_IP_ADDR）。因此**未配 domain 的租户完全无感**，仍走全局 domain，第一期行为不变。
+- **存量无感迁移**：第一期存量账号留在全局 domain 不动（v2 已定）；仅当设备被「改租户/认领」到**已配置 domain** 的租户时，才触发 v2 T07 的「迁移到新 domain」脚本+开关；否则零迁移。
+
+### v3.5 未认领 / 异常处理规则
+
+| 场景 | 规则 |
+|---|---|
+| IMEI 重复归属 | `dsip_ufi_import.imei` 唯一键；导入时撞已有 IMEI（无论是否已匹配）→ 该行拒绝并逐条返回失败原因，**不跨租户抢占**；若该 IMEI 设备已被认领且属他租户 → 提示先「释放/改租户」 |
+| 设备改租户 | 平台管理员 `POST /api/v1/ufi/devices/<imei>/claim` 设新 `customer_id`；同步**删除/改写**其 `dsip_ufi_import` 行，避免下次 resolve 抢回旧租户；第一期不迁移 SIP domain（v2 已定），第二期触发 domain 迁移脚本 |
+| 孤儿 IMEI（已预置未注册） | `matched=0` 且超期（如 90 天）→ 平台管理员可在预置清单中删除/忽略，不占归属 |
+| 孤儿 IMEI（已注册待认领） | 常驻待认领池，平台管理员可批量认领 / 忽略 / 删除设备 |
+| 客户删除 | 删客户前先处理其名下设备：`dsip_ufi_device` 置 `customer_id=NULL, claim_status=0`（回待认领池，**不污染默认租户**），并删除其 `dsip_ufi_import` 行——需在 `acl_customer_one` DELETE 分支补此清理 |
+
+### v3.6 任务分解更新（基于 v2 T01~T08 标注变更）
+
+| 任务 | v2 内容 | v3 增量/变更 | 工作量 | 依赖 |
+|---|---|---|---|---|
+| **T01** 基础设施 | domain列/default seed/回填/隔离原语 | +`dsip_ufi_import` DDL；+`resolve_device_customer()`；+`_tenant_domain()` 占位；+`dsip_ufi_device.claim_status` 迁移 | 中 → 中+ | — |
+| **T02** 设备域隔离 | 写路径打点、自注册落默认租户 | 自注册 `customer_id=resolve_device_customer`；`_handle_sip_setting` 先归属后 provision；+导入/预置清单/待认领池/认领 5 端点；`listUfiDevices` 增待认领态；`acl_customer_one` 删客户补设备清理 | 大 → 大+ | T01 |
+| **T03** 通信/号码池隔离 | 加列+过滤+断言 | 无变化（归属仍经 `device.customer_id`） | 中（不变） | T01 |
+| **T04** 短信网关+白名单隔离 | 加列+过滤 | 无变化 | 中（不变） | T01 |
+| **T05** 账号管理+路由+CDR 隔离 | 归属校验/过滤 | 无变化（账号 CRUD 已用 `require_owned_imei`，待认领 NULL 自动 403） | 大（不变） | T03,T04 |
+| **T06** domain 租户化 | `_ufi_auth_domain`→`_tenant_domain` | `_tenant_domain()` 正式替换；`domain=NULL` 继承全局 | 中 | T01 |
+| **T07** 下发 domain + 改租户↔domain | 下发/迁移脚本 | 认领/改租户端点触发 domain 迁移（第二期）；存量全局 domain 无感 | 中 | T06 |
+| **T08** Kamailio 多 domain 验证 | 注册/路由/DID/CDR 回归 | +导入/待认领/认领端到端回归 | 中 | T07 |
+
+**依赖图（v3）**：
+```
+T01 ──> T02 ──> T05 ──> T06 ──> T07 ──> T08
+  ├─────> T03 ──> T05
+  └─────> T04 ──> T05
+```
+> 新增「导入/待认领/认领」全部收敛在 T02 内，不新增独立任务，保持 v2 的 8 任务骨架与依赖链不变。
+
+### v3.7 越权 / 安全
+
+| 新增操作面 | 是否跨租户越权风险 | 覆盖方式 |
 |---|---|---|
-| 1 | 租户规模与增速 | 决定是否投入第二期 domain 隔离 |
-| 2 | 是否自助开通 | 自助开通需审批流 + "导入即归属" |
-| 3 | DID 是否租户独享 | 决定 `dsip_ufi_pool_did` 唯一键是否加 customer_id |
-| 4 | UFI 是否支持自定义 domain/Realm | 决定第二期 domain 能否真正下发到设备 |
-| 5 | 历史 `dsip_admin` 归属（平台管理员 vs 默认租户） | 影响 `resolve_acl` 历史账号分支 |
-| 6 | CDR 是否要求严格隔离（反查 vs 直接给 `cdrs` 加列） | 性能与改造量取舍 |
-| 7 | dispatcher/address/mapping 是否租户化 | 影响第二期范围 |
-| 8 | 设备改租户时 domain 是否同步迁移（v2 已给默认预期：第一期不同步、第二期提供脚本+开关） | 需产品确认最终语义 |
+| IMEI 匹配归属（`resolve_device_customer`） | 低 | 仅在设备自注册 API 内执行（设备签名门禁）；只能给 `customer_id IS NULL` 的设备**首次**赋值（`IF(customer_id IS NULL, …)`），无法改写已归属设备；预置表由平台管理员独占维护 |
+| 批量导入 | 无（平台管理员专属） | `POST /api/v1/acl/customers/<cid>/import` 复用 `acl_customers` 的 `is_platform_admin()` + `_require_users_menu()` 门禁；`uk_import_imei` 唯一键防多租户抢占 |
+| 待认领池 / 认领 / 改租户 | 无（平台管理员专属） | `GET /api/v1/ufi/devices/unclaimed`、`POST /api/v1/ufi/devices/<imei>/claim` 均 `is_platform_admin()` 门禁；租户对 `customer_id IS NULL` 设备：`require_owned_imei` → owned=None → 403，`scoped_imei` → EXISTS 不命中 → 不可见 |
+
+- **结论**：三处新增面均落在「平台管理员专属」或「设备自注册仅首次赋值」边界内，**既有 `require_owned_imei`/`scoped_imei` 无需改动**即可覆盖；唯一需新增的断言是 `import/claim/unclaimed` 三个端点入口的 `is_platform_admin()` 判断（与 `acl_customers` 同款）。
+
+---
+
+## v3.8 修订（QA 复审定稿）—— 2026-10-19
+
+> **结论先行（v3.8）**：吸收 QA 3 阻断 + 3 附加，定稿三原则——①`claim_status` **由同一次写入的最终 `customer_id` 原子推导**（`IF(customer_id IS NULL,0,1)`），杜绝 `非NULL+0` / `NULL+1` 非法态；②安全分层：**第一期 fail-closed**（空 secret 拒绝、强制治理默认 '123456'、sim 二次校验、`SELECT ... FOR UPDATE` 先到先得），**长期 per-device/per-tenant 密钥与随机 SIP 密码依赖设备固件，列为 P1 待评估**，不改 `md5(imei)[:16]`/username=SIM 既有约定；③统一 `set_device_customer` + `_delete_ufi_account` 两个原语，覆盖删客户/改租户/删设备/认领的全部清理。**不新增独立任务，全部收敛 T01/T02/T07。**
+
+### v3.8.1 与 v3 的差异对照
+
+| # | v3 问题 | v3.8 定稿 |
+|---|---|---|
+| 1 | claim_status 与 customer_id 分写，可能脱节成非法态 | claim_status 由同一语句最终 customer_id 推导 |
+| 2 | secret 为空直接放行、默认 '123456' 未治理、密码可预测 | 第一期 fail-closed + 默认密钥治理 + sim 二次校验 + FOR UPDATE 锁；随机密码/密钥列长期 P1 |
+| 3 | 删客户/改租户/删设备漏清理 SIP 账号、条件未统一 | `set_device_customer` + `_delete_ufi_account` 统一原语，全路径复用 |
+| 4 | backfill 会污染待认领池 | `dsip_ufi_device` 从回填清单排除 |
+| 5 | provisioned 被 GREATEST 累积，回待认领后仍=1 | release 路径显式置 provisioned=0 |
+| 6 | 改租户/认领复用删除逻辑未清号 | 删旧域号 + 建新域号 |
+
+### v3.8.2 定稿规则清单（每条「落点 + 规则」）
+
+| 项 | 落点（文件:函数/行） | 规则 |
+|---|---|---|
+| **A1** | `ufi_device.py:_upsert_device`(349-390) | `claim_status` 不由外部独立值写，必须由同语句最终 `customer_id` 推导：INSERT 值 `IF(:customer_id IS NULL,0,1)`；ON DUPLICATE 先 `customer_id=IF(customer_id IS NULL,:customer_id,customer_id)` 后 `claim_status=IF(customer_id IS NULL,0,1)`（MySQL 同语句左到右赋值，后者读到新值） |
+| **A2** | `ufi_device.py:_ensure_ufi_tables` | 加 `CHECK((customer_id IS NULL AND claim_status=0) OR (customer_id IS NOT NULL AND claim_status=1))`（MySQL 8.0.16+ 生效；旧版仅解析不强制，故 A1 代码层推导为主保证） |
+| **A3** | `acl.py:set_device_customer(db,imei,cid)`（新增） | 单条原子写：`UPDATE dsip_ufi_device SET customer_id=:cid, claim_status=IF(:cid IS NULL,0,1), provisioned=IF(:cid IS NULL,0,provisioned) WHERE imei=:imei`；claim/改租户/删客户/删设备全部复用 |
+| **A4** | `acl.py:backfill_tenants` / 新增 `mt_backfill_v3` | 存量修正：`UPDATE dsip_ufi_device SET claim_status=1 WHERE customer_id IS NOT NULL AND claim_status=0`；**不动 NULL 行** |
+| **B1** | `ufi_device.py:_sign_fail_reason`(257) | secret 为空 → 返回 `'secret not configured'` 拒绝（fail-closed），删除 `if not secret: return None` |
+| **B2** | `ufi_device.py:_ensure_ufi_tables`/`_load_ufi_config` | 若 `secret_key IN ('', '123456')` 置 `secret_pending=1`，设备 provisioning 端点 fail-closed 并提示设置强密钥；设置后经 ufi-hub 重新下发 |
+| **B3** | `acl.py:resolve_device_customer` | sim 二次校验：import 行 `sim` 非空时，比对上报 sim，不匹配 → 不落归属（返回 None，进待认领） |
+| **B4** | `acl.py:resolve_device_customer` | 首次匹配 `SELECT ... FOR UPDATE`（按 imei 锁 import 行）先到先得，防并发抢注 |
+| **C1** | `acl.py:acl_customer_one`(511-518) | DELETE 分支补：遍历名下设备 → `_delete_ufi_account(imei)` + `set_device_customer(imei,NULL)`（回待认领+provisioned=0）+ 删其 `dsip_ufi_import` 行 |
+| **C2** | `ufi_device.py:_handle_sip_setting`(867-924) | **仅已归属**才 `_upsert_ufi_account` 并下发 `sipServerAddress/sipServerPort/sippassWord` 等 SIP 凭证；待认领分支只返回 ack（无账号、无凭证） |
+| **C3** | `ufi_device.py:deleteUfiDevice`(1148) | 补删 `subscriber` + `dbaliases`（`username=imei`，跨 domain），再删事件族+device |
+| **D1** | `acl.py:backfill_tenants`(194) | 新增 `_BACKFILL_EXCLUDE={'dsip_ufi_device'}`，回填跳过；存量→default 由已运行的 `mt_backfill_v2` 一次性完成，v3 后 NULL=待认领为合法态 |
+| **D2** | `acl.py:set_device_customer` | `cid IS NULL` 时显式 `provisioned=0`（不走 `GREATEST` 累积） |
+| **D3** | claim/改租户端点（`ufi_device.py` 新增） | 改租户先 `_delete_ufi_account(imei)` 删旧域号，`set_device_customer(imei,new_cid)`，再 `_upsert_ufi_account(db,imei,sim,_tenant_domain(new_cid))` 建新域号 |
+
+### v3.8.3 任务分解影响
+
+| 任务 | 增量 | 工作量 | 依赖 |
+|---|---|---|---|
+| **T01** | +`set_device_customer` 原语；+`_BACKFILL_EXCLUDE`；+`mt_backfill_v3`（claim_status 修正）；+CHECK 约束（可选，MySQL 版本门控）；+secret fail-closed/默认密钥治理 | 中 → 中+ | — |
+| **T02** | +resolve sim 二次校验 + FOR UPDATE 锁；+`_delete_ufi_account`；+`deleteUfiDevice` 补 subscriber/dbaliases；+claim/改租户/删客户编排；+`_handle_sip_setting` 条件下发凭证 | 大 → 大+ | T01 |
+| **T07** | +改租户 domain 迁移时删旧域号、建新域号（复用 D3） | 中 | T06 |
+
+- 依赖链不变：`T01→T02→T05→T06→T07→T08`、`T01→T03/T04→T05`。
+- **不新增独立任务**；长期加固（per-device/per-tenant 密钥、随机 SIP 密码）列为 **P1 待评估**（依赖设备固件），不进入 T01~T08。
 
 ---
 

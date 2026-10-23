@@ -13,6 +13,51 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const icon = (n, size, cls) => window.Icon.svg(n, size, cls);
 
+  /* 列表选区：有选中文本或拖拽选字时，不触发行跳转 / 不打断实时刷新 */
+  let _ptrDown = null;
+  function hasTextSelection() {
+    try {
+      const s = window.getSelection && window.getSelection();
+      return !!(s && String(s).replace(/\s+/g, '').length);
+    } catch (e) { return false; }
+  }
+  function trackPtrDown(e) {
+    if (e.button !== 0) return;
+    _ptrDown = { x: e.clientX, y: e.clientY, t: Date.now() };
+  }
+  function wasDragSelect(e) {
+    if (!_ptrDown) return false;
+    const dx = Math.abs((e.clientX || 0) - _ptrDown.x);
+    const dy = Math.abs((e.clientY || 0) - _ptrDown.y);
+    return dx > 4 || dy > 4;
+  }
+  function shouldSkipRowNav(e) {
+    return hasTextSelection() || wasDragSelect(e);
+  }
+  function bindListCopyHelpers(root) {
+    const el = typeof root === 'string' ? $(root) : root;
+    if (!el || el._copyBound) return;
+    el._copyBound = true;
+    el.addEventListener('mousedown', trackPtrDown, true);
+    el.addEventListener('dblclick', e => {
+      const cell = e.target.closest('.copyable, .cell-imei, .mono-sm, td.mono, .mono');
+      if (!cell || cell.closest('button,a,input,select,label')) return;
+      let text = (cell.getAttribute('data-copy') || cell.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text || text === '—' || text.length < 2) return;
+      e.preventDefault();
+      const done = () => Toast.show('ok', '已复制', text.length > 48 ? text.slice(0, 48) + '…' : text);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(() => {
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); ta.remove(); done();
+          } catch (ex) { /* ignore */ }
+        });
+      }
+    });
+  }
+
   /* ---------------- Formatters ---------------- */
   const fmtInt = n => Number(n).toLocaleString('en-US');
   const fmtPct = n => n.toFixed(1) + '%';
@@ -349,6 +394,7 @@
     },
 
     bindBody() {
+      bindListCopyHelpers('#gridBody');
       $('#gridBody').addEventListener('click', e => {
         /* row action buttons */
         const btn = e.target.closest('button[data-act]');
@@ -365,8 +411,9 @@
           else if (act === 'del') Commands.removeDevice(imei);
           return;
         }
-        /* row click → detail (unless a control was hit) */
-        if (e.target.closest('input,select,label')) return;
+        /* row click → detail（选中/拖选文字时不打开，便于复制 IMEI/SIM） */
+        if (e.target.closest('input,select,label,button,a')) return;
+        if (shouldSkipRowNav(e)) return;
         const tr = e.target.closest('tr[data-imei]');
         if (tr) Drawer.open(tr.dataset.imei);
       });
@@ -691,7 +738,7 @@
         return '<tr data-imei="' + d.imei + '" class="' + rowCls + '">' +
           '<td class="col-check"><input type="checkbox" data-row="' + d.imei + '"' + (sel ? ' checked' : '') + ' aria-label="选择 ' + d.imei + '"></td>' +
           '<td class="cell-ident"><div class="cell-stack">' +
-          '<span class="cell-imei">' + esc(d.imei) + (d.severity === 'err' && d.issues.length ? '<span class="dot dot--err" title="' + esc(d.issues.join('、')) + '"></span>' : '') + '</span>' +
+          '<span class="cell-imei copyable" data-copy="' + esc(d.imei) + '" title="双击复制 IMEI">' + esc(d.imei) + (d.severity === 'err' && d.issues.length ? '<span class="dot dot--err" title="' + esc(d.issues.join('、')) + '"></span>' : '') + '</span>' +
           '<span class="cell-sub">' + esc(d.sn) + ' · ' + esc(d.apkVersion) + '</span>' +
           '<span class="cell-sub" title="buildNumber">' + esc(d.buildNumber || '—') + '</span>' +
           '</div></td>' +
@@ -704,7 +751,7 @@
           '<td>' + pill(d.volteRegisterStatus, '已注册', '未注册') + '</td>' +
           '<td>' + pill(d.voipRegisterStatus, '已注册', d.sipregeststatus === 'none' ? '不适用' : '未注册') + '</td>' +
           '<td><div class="cell-stack"><span class="mono-sm">WFC ' + (d.wfcStatus === '1' ? 'ON' : 'OFF') + '</span>' +
-          '<span class="cell-sub">' + esc(d.encryptionType.toUpperCase()) + ' / ' + esc(d.transportProtocol) + '</span></div></td>' +
+          '<span class="cell-sub">' + esc((d.encryptionType || '').toUpperCase()) + ' / ' + esc(d.transportProtocol || '') + '</span></div></td>' +
           '<td><div class="cell-stack"><span class="mono-sm">' + esc(d.operatorName || d.cellularNetwork) + '</span>' +
           '<span class="cell-sub">' + esc(d.cellularNetwork) + ' · ' + esc(d.imsi) + '</span></div></td>' +
           '<td><div class="cell-stack"><span class="badge badge--' + (d.simState === 'READY' ? 'ok' : d.simState === 'PIN_REQUIRED' ? 'warn' : 'idle') + '">' + esc(d.simState === 'READY' ? '正常' : d.simState === 'PIN_REQUIRED' ? '待解锁' : '无卡') + '</span>' +
@@ -929,7 +976,7 @@
         ['volteRegisterStatus', 'VoLTE 注册状态', d.volteRegisterStatus, '0 未注册 / 1 已注册'],
         ['voipRegisterStatus', 'SIP（VoIP）注册状态', d.voipRegisterStatus, '0 未注册 / 1 已注册'],
         ['websocketStatus', 'WebSocket 连接状态', d.websocketStatus, '0 未连接 / 1 已连接'],
-        ['wfcStatus', 'WiFi Calling 状态', d.wfcStatus, '0 关闭 / 1 开启'],
+        ['wfcStatus', 'WiFi Calling 状态', d.wfcStatus === '1' ? 'ON' : 'OFF', '设备上报 ON/OFF 或 0/1'],
         ['airplaneMode', '飞行模式', d.airplaneMode, '0 正常 / 1 飞行模式'],
         ['lteStatus', '核心网连接状态', d.lteStatus, 'LTE-Connect / HeartBeat / Disconnect'],
         ['sipregeststatus', 'SIP 注册结果', d.sipregeststatus, 'success / faild / none'],
@@ -1498,7 +1545,7 @@
       const ck = (id, v) => { const el = $(id); if (el) el.checked = !!v; };
 
       g('#sSipAddr', d ? d.sipServerAddress : '101.132.78.224');
-      g('#sSipPort', d ? d.sipServerPort : 5060);
+      g('#sSipPort', d && d.sipServerPort ? d.sipServerPort : 10560);
       g('#sSipPwd', d ? (d.sippassWord || '') : '');
       this.setPwdVisible(false);
       g('#sSsid', d ? d.wlanName : '');
@@ -1534,7 +1581,7 @@
       const payload = {
         msgType: 'Ufi-Set-Request',
         sipServerAddress: v('#sSipAddr'),
-        sipServerPort: Number(v('#sSipPort')) || 5060,
+        sipServerPort: Number(v('#sSipPort')) || 10560,
         transportProtocol: v('#sTransport'),
         encryptionType: v('#sEncryption'),
         wlanCallingStatus: v('#sWfc'),
@@ -1897,8 +1944,18 @@
     closeAll() { $$('.modal-scrim.is-open').forEach(s => s.classList.remove('is-open')); }
   };
 
+  function ufiTabAllowed(view) {
+    if (window.IS_PLATFORM_ADMIN) return true;
+    const ps = window.MENU_PERMS || [];
+    const key = 'biz.ufi.' + view;
+    if (ps.indexOf(key) >= 0) return true;
+    const hasChild = ps.some(p => String(p).indexOf('biz.ufi.') === 0);
+    return !hasChild && ps.indexOf('biz.ufi') >= 0;
+  }
+
   const Nav = {
     go(view) {
+      if (!ufiTabAllowed(view)) return;
       $$('.ufi-console .view').forEach(v => v.classList.toggle('is-active', v.id === 'view-' + view));
       $$('.ufi-tab[data-view], .side-link[data-view]').forEach(l => {
         l.classList.toggle('is-active', l.dataset.view === view);
@@ -1912,7 +1969,15 @@
       if (view === 'devlogs') DevLogs.render();
     },
     init() {
-      $$('.ufi-tab[data-view], .side-link[data-view]').forEach(l => l.addEventListener('click', () => this.go(l.dataset.view)));
+      let first = '';
+      $$('.ufi-tab[data-view], .side-link[data-view]').forEach(l => {
+        const ok = ufiTabAllowed(l.dataset.view);
+        l.style.display = ok ? '' : 'none';
+        if (ok && !first) first = l.dataset.view;
+        l.addEventListener('click', () => this.go(l.dataset.view));
+      });
+      const active = document.querySelector('.ufi-tab.is-active');
+      if (first && (!active || active.style.display === 'none')) this.go(first);
       // "查看日志文件" links inside command consoles / toasts → collected-logs view (pre-filtered by imei)
       document.addEventListener('click', e => {
         const gf = e.target.closest('[data-goto-files]');
@@ -2052,6 +2117,7 @@
       Toast.show('ok', '已同步最新状态', '拉取 register-status-push 增量并重算健康度');
     });
     const platBtn = $('#btnPlatform');
+    if (platBtn && !window.IS_PLATFORM_ADMIN) platBtn.style.display = 'none';
     if (platBtn) platBtn.addEventListener('click', () => {
       const box = $('#ufiPlatform');
       if (box) box.classList.toggle('is-open');
@@ -2098,7 +2164,9 @@
 
     setInterval(async () => {
       if (!Devices.live) return;
+      if (hasTextSelection()) return; /* 选中文字时暂缓刷新，避免打断复制 */
       await S.tick();
+      if (hasTextSelection()) return;
       paintSidebarCounters();
       const ov = $('#view-overview'), dv = $('#view-devices'), rec = $('#view-records'), cmd = $('#view-commands'), dl = $('#view-devlogs');
       if (ov && ov.classList.contains('is-active')) Overview.render();

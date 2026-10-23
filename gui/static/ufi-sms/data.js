@@ -164,6 +164,23 @@
       await DB.refresh();
       return r;
     },
+    async createPool(poolId, strategy, dids) {
+      const res = await fetch('/api/v1/ufi/comm/pools', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pool_id: poolId,
+          strategy: strategy || 'round_robin',
+          dids: dids || []
+        })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.status === 401) { location.href = '/'; throw new Error('登录已过期，正在跳转登录页…'); }
+      if (!res.ok) throw new Error(json.msg || ('HTTP ' + res.status));
+      try { await DB.loadPoolMembers(); } catch (e) { /* ignore */ }
+      return json;
+    },
     carriers: [],
     async saveCarrier(carrier, payload) {
       await apiSend('carriers/' + encodeURIComponent(carrier), 'PUT', payload || {});
@@ -239,6 +256,51 @@
       const d = await apiGet('apilogs?' + parts.join('&'));
       DB.apiLogs = d[0] || { list: [], total: 0, page: 1, pages: 1, size: 15, carriers: [] };
       return DB.apiLogs;
+    },
+
+    /* ---------- 运营商短信告警 ---------- */
+    alertsQ: { status: 'all', type: '', sim: '', q: '', page: 1, size: 10 },
+    alerts: { items: [], total: 0, page: 1, size: 10 },
+    alertStats: {},
+    alertSims: [],
+    alertCfg: {},
+    async loadAlertStats() {
+      const d = await apiGet('alerts/stats');
+      DB.alertStats = d[0] || {};
+      return DB.alertStats;
+    },
+    async loadAlertSims() {
+      DB.alertSims = await apiGet('alerts/sims');
+      return DB.alertSims;
+    },
+    async loadAlerts() {
+      const q = DB.alertsQ;
+      const parts = [
+        'page=' + (q.page || 1),
+        'size=' + (q.size || 10)
+      ];
+      if (q.status && q.status !== 'all') parts.push('status=' + encodeURIComponent(q.status));
+      if (q.type) parts.push('type=' + encodeURIComponent(q.type));
+      if (q.sim) parts.push('sim=' + encodeURIComponent(q.sim));
+      if (q.q) parts.push('q=' + encodeURIComponent(q.q));
+      const d = await apiGet('alerts?' + parts.join('&'));
+      DB.alerts = d[0] || { items: [], total: 0, page: 1, size: 10 };
+      return DB.alerts;
+    },
+    async loadAlertCfg() {
+      const d = await apiGet('alerts/config');
+      DB.alertCfg = d[0] || {};
+      return DB.alertCfg;
+    },
+    async scanAlerts() { return apiSend('alerts/scan', 'POST', {}); },
+    async alertDone(id, remark) { return apiSend('alerts/' + id + '/done', 'POST', { remark: remark || '' }); },
+    async alertSimDone(sim, imei, remark) {
+      return apiSend('alerts/sims/done', 'POST', { sim: sim || '', imei: imei || '', remark: remark || '' });
+    },
+    async alertDoneAll() { return apiSend('alerts/done-all', 'POST', {}); },
+    async saveAlertCfg(cfg) { return apiSend('alerts/config', 'POST', cfg); },
+    async classifyAlert(body, peer, cfg) {
+      return apiSend('alerts/classify', 'POST', { body: body || '', peer: peer || '', cfg: cfg || {} });
     }
   };
 

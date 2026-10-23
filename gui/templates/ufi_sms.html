@@ -16,6 +16,7 @@
     <button type="button" class="ufi-tab navitem is-active" data-v="compose" data-menu="biz.sms.compose">发送短信</button>
     <button type="button" class="ufi-tab navitem" data-v="campaign" data-menu="biz.sms.campaign">群发短信 <span class="tab-count" id="cntCampaign">0</span></button>
     <button type="button" class="ufi-tab navitem" data-v="records" data-menu="biz.sms.records">短信记录 <span class="tab-count" id="cntRecords">0</span></button>
+    <button type="button" class="ufi-tab navitem" data-v="alerts" data-menu="biz.sms.alerts">告警中心 <span class="tab-count is-alert" id="cntAlerts">0</span></button>
     <button type="button" class="ufi-tab navitem" data-v="channels" data-menu="biz.sms.channels">通道与频控 <span class="tab-count" id="cntChannels">0</span></button>
     <button type="button" class="ufi-tab navitem" data-v="tpl" data-menu="biz.sms.tpl">短信模板 <span class="tab-count" id="cntTpl">0</span></button>
     <button type="button" class="ufi-tab navitem" data-v="blacklist" data-menu="biz.sms.blacklist">黑名单 <span class="tab-count" id="cntBlack">0</span></button>
@@ -143,6 +144,64 @@
     </div>
   </section>
 
+  <!-- ─────────── 告警中心 ─────────── -->
+  <section class="view" id="v-alerts">
+    <div class="view-head">
+      <div class="t">
+        <h2>短信告警中心</h2>
+        <p>规则引擎分级：P0 欠费停机 · P1 欠费预警 · P2 余额不足 · P3 超套费用；端口白名单防钓鱼；充值到账自动恢复。新上行实时判定，也可手动回扫。</p>
+      </div>
+      <div class="acts">
+        <button class="btn" type="button" id="alertScan"><span data-i="refresh"></span>立即扫描</button>
+        <button class="btn" type="button" id="alertTestBench"><span data-i="search"></span>规则测试台</button>
+        <button class="btn" type="button" id="alertMailCfg"><span data-i="send"></span>告警设置</button>
+        <button class="btn primary" type="button" id="alertDoneAll"><span data-i="check"></span>全部标为已处理</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpiAlerts"></div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-head">
+        <h3><span data-i="sim"></span>异常手机卡</h3>
+        <span class="hint">处理粒度为手机卡：一点「处理」将清掉该卡下全部未处理告警</span>
+        <span class="tag danger" id="abnCount" style="margin-left:8px">0 张</span>
+      </div>
+      <div class="panel-body flush">
+        <div class="tablewrap"><table class="grid"><thead><tr>
+          <th>手机号</th><th>设备 IMEI</th><th>运营商</th><th>状态</th>
+          <th>解析余额 / 欠费</th><th>最近异常短信</th><th>未处理</th><th class="col-act">操作</th>
+        </tr></thead><tbody id="abnBody"></tbody></table></div>
+        <div class="empty" id="abnEmpty" style="display:none;padding:28px;text-align:center;color:#94a3b8">所有手机卡状态正常</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3><span data-i="inbox"></span>异常短信列表</h3>
+        <span class="hint" id="alertLastScan">—</span></div>
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+        <div class="tabs" id="alertStatusSeg">
+          <button type="button" class="on" data-ast="all">全部</button>
+          <button type="button" data-ast="todo">未处理 <span id="todoN">0</span></button>
+          <button type="button" data-ast="done">已处理</button>
+        </div>
+        <select class="sel sel-filter" id="alertType">
+          <option value="">全部类型</option>
+          <option value="欠费停机">P0 欠费停机</option>
+          <option value="欠费预警">P1 欠费预警</option>
+          <option value="余额不足">P2 余额不足</option>
+          <option value="超套费用">P3 超套费用</option>
+          <option value="疑似告警">疑似告警</option>
+        </select>
+        <select class="sel sel-filter" id="alertSim">
+          <option value="">全部手机号</option>
+        </select>
+        <input class="inp" id="alertKw" autocomplete="off" placeholder="搜索关键词 / 号码…" style="width:200px">
+        <button type="button" class="btn sm primary" id="alertApply">查询</button>
+        <span class="tb-count" id="alertCount"></span>
+      </div>
+      <div class="panel-body" id="alertList"></div>
+      <div class="pager-bar" id="pgAlerts"></div>
+    </div>
+  </section>
+
   <!-- ─────────── 3. 群发短信 ─────────── -->
   <section class="view" id="v-campaign">
     <div class="view-head">
@@ -188,7 +247,7 @@
     <div class="view-head">
       <div class="t">
         <h2>通道与频控</h2>
-        <p>短信通道 = <b>已注册 + SIM 就绪</b> 的 UFI（按 IMEI 关联设备台账）。发送策略与频控参数保存在 dSIPRouter，保存即时生效。</p>
+        <p>短信从哪里发、发多快，都在这里管。<b>日常只需要看两处</b>：①「可用通道」——每张 SIM 卡的信号和状态；②「发信设备」——勾选设备加入号码池。限速、夜间静默默认已配好，进阶设置已折叠，需要时再展开。</p>
       </div>
       <div class="acts">
         <button class="btn" data-act="go-cc"><span data-i="headset"></span>呼叫中心线路配置 ↗</button>

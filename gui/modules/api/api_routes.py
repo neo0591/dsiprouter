@@ -163,7 +163,7 @@ def getStats():
         # Get Kamailio Stats
         jsonrpc_payload = {"jsonrpc": "2.0", "method": "tm.stats", "id": 1}
         try:
-            r = requests.get('http://127.0.0.1:5060/api/kamailio', json=jsonrpc_payload)
+            r = requests.get('http://127.0.0.1:10560/api/kamailio', json=jsonrpc_payload)
             # Only using waiting stat for now, but we can easily add more if needed
             data['queued_messages'] = r.json()['result']['waiting']
         except requests.exceptions.RequestException as e:
@@ -172,7 +172,7 @@ def getStats():
       
         jsonrpc_payload = {"jsonrpc": "2.0", "method": "dlg.stats_active", "id": 1}
         try:
-            r = requests.get('http://127.0.0.1:5060/api/kamailio', json=jsonrpc_payload)
+            r = requests.get('http://127.0.0.1:10560/api/kamailio', json=jsonrpc_payload)
             data['active_calls'] = r.json()['result']['all']
         except requests.exceptions.RequestException as e:
             data['active_calls'] = 0
@@ -181,7 +181,7 @@ def getStats():
         # Get UAC Registration Info for both Endpoints and Carrier Groups
         jsonrpc_payload = {"jsonrpc": "2.0", "method": "uac.reg_dump", "id": 1}
         try:
-            r = requests.get('http://127.0.0.1:5060/api/kamailio', json=jsonrpc_payload)
+            r = requests.get('http://127.0.0.1:10560/api/kamailio', json=jsonrpc_payload)
             if r.json()['result'] is not None:
                 registrations = r.json()['result']
                 num_of_reg_failures = 0
@@ -214,7 +214,7 @@ def getKamailioStats():
             debugEndpoint()
 
         jsonrpc_payload = {"jsonrpc": "2.0", "method": "tm.stats", "id": 1}
-        r = requests.get('http://127.0.0.1:5060/api/kamailio', json=jsonrpc_payload)
+        r = requests.get('http://127.0.0.1:10560/api/kamailio', json=jsonrpc_payload)
         if r.status_code >= 400:
             ex = http_exceptions.HTTPException(r.reason)
             ex.code = r.status_code
@@ -2188,6 +2188,10 @@ def listUfiAccounts():
 
         db = startSession()
         domain = request.args.get('domain') or _ufi_auth_domain()
+        from modules.api.acl import scoped_imei
+        frag, fp = scoped_imei('s', 'username')
+        params = {'domain': domain}
+        params.update(fp)
         result = db.execute(text(
             "SELECT s.id, s.username AS imei, s.domain, "
             "GROUP_CONCAT(DISTINCT a.alias_username ORDER BY a.alias_username SEPARATOR ',') AS sims, "
@@ -2195,10 +2199,10 @@ def listUfiAccounts():
             "FROM subscriber s "
             "LEFT JOIN dbaliases a ON a.username = s.username AND a.domain = s.domain "
             "LEFT JOIN location loc ON loc.username = s.username AND loc.expires > NOW() "
-            "WHERE s.domain = :domain "
+            "WHERE s.domain = :domain" + frag + " "
             "GROUP BY s.id, s.username, s.domain "
             "ORDER BY s.id DESC"
-        ), {'domain': domain}).mappings().all()
+        ), params).mappings().all()
 
         data = []
         for row in result:
@@ -2233,7 +2237,7 @@ def getUfiSetupStatus():
 
         db = startSession()
         domain = _ufi_auth_domain()
-        sip_port = str(getattr(settings, 'KAM_SIP_PORT', None) or getattr(settings, 'INTERNAL_SIP_PORT', None) or 5060)
+        sip_port = str(getattr(settings, 'KAM_SIP_PORT', None) or getattr(settings, 'INTERNAL_SIP_PORT', None) or 10560)
         sip_host = str(getattr(settings, 'EXTERNAL_IP_ADDR', '') or domain)
 
         ufi_total = int(db.execute(text(
@@ -2357,6 +2361,9 @@ def addUfiAccount():
         payload = getRequestData() or {}
         domain = payload.get('domain') or _ufi_auth_domain()
         imei = _normalize_ufi_imei(payload.get('imei'))
+        from modules.api.acl import require_owned_imei, ensure_acl_tables
+        ensure_acl_tables(db)
+        require_owned_imei(db, imei)
         sim = _normalize_ufi_sim(payload.get('sim'), required=False)
         account = _upsert_ufi_account(db, imei, sim, domain)
         db.commit()
@@ -2388,6 +2395,9 @@ def updateUfiAccount(account_id):
         ), {'id': account_id}).mappings().first()
         if row is None:
             raise http_exceptions.NotFound('UFI account not found')
+        from modules.api.acl import require_owned_imei, ensure_acl_tables
+        ensure_acl_tables(db)
+        require_owned_imei(db, row['username'])
 
         payload = getRequestData() or {}
         old_imei = row['username']
@@ -2407,6 +2417,7 @@ def updateUfiAccount(account_id):
 
         password = _ufi_password(new_imei)
         if new_imei != old_imei:
+            require_owned_imei(db, new_imei)
             taken = db.execute(text(
                 "SELECT id FROM subscriber WHERE username = :username AND domain = :domain AND id <> :id"
             ), {'username': new_imei, 'domain': domain, 'id': account_id}).first()
@@ -2470,6 +2481,9 @@ def deleteUfiAccount(account_id):
         ), {'id': account_id}).mappings().first()
         if row is None:
             raise http_exceptions.NotFound('UFI account not found')
+        from modules.api.acl import require_owned_imei, ensure_acl_tables
+        ensure_acl_tables(db)
+        require_owned_imei(db, row['username'])
 
         db.execute(text(
             "DELETE FROM dbaliases WHERE username = :imei AND domain = :domain"
@@ -2530,6 +2544,9 @@ def importUfiAccounts():
                     raise http_exceptions.BadRequest('Unrecognized row format')
 
                 imei = _normalize_ufi_imei(imei_val)
+                from modules.api.acl import require_owned_imei, ensure_acl_tables
+                ensure_acl_tables(db)
+                require_owned_imei(db, imei)
                 sim = _normalize_ufi_sim(sim_val, required=False)
                 account = _upsert_ufi_account(db, imei, sim, domain)
                 saved.append(account)
@@ -3508,6 +3525,10 @@ def generateCDRS(
 
     try:
         db = startSession()
+        from modules.api.acl import assert_gwgroup, ensure_acl_tables
+        if not run_standalone:
+            ensure_acl_tables(db)
+            assert_gwgroup(db, gwgroupid if str(gwgroupid).isdigit() else 0)
 
         gwgroupid_int = int(gwgroupid) if str(gwgroupid).isdigit() else 0
         if isinstance(gwgroupid, int):
@@ -3893,7 +3914,13 @@ def listCdrGroups():
             debugEndpoint()
 
         db = startSession()
+        from modules.api.acl import ensure_acl_tables, tenant_gwgroup_ids
+        ensure_acl_tables(db)
         groups = db.query(GatewayGroups).order_by(GatewayGroups.id.asc()).all()
+        allowed = tenant_gwgroup_ids(db)
+        if allowed is not None:
+            allowed_set = set(allowed)
+            groups = [g for g in groups if g.id in allowed_set]
         response_data = []
         for group in groups:
             fields = strFieldsToDict(group.description)
@@ -4221,7 +4248,7 @@ def getOptionMessageStatus(domain):
     domain_active = False
     cmdset = {"method": "dispatcher.list", "jsonrpc": "2.0", "id": 1}
 
-    r = requests.get('http://127.0.0.1:5060/api/kamailio', json=cmdset)
+    r = requests.get('http://127.0.0.1:10560/api/kamailio', json=cmdset)
     if r.status_code >= 400:
         try:
             msg = r.json()['error']['message']

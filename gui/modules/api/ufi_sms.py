@@ -281,15 +281,21 @@ def _words_of(db, customer_id=_CID_UNSET):
 
 
 def _black_hit(db, num, customer_id=_CID_UNSET):
-    sql = "SELECT COUNT(*) FROM dsip_ufi_sms_black WHERE num=:n"
-    params = {'n': num}
+    variants = _cn_addr_variants(num) or {norm_sms_addr(num) or num}
     if customer_id is _CID_UNSET:
         frag, extra = _scope_and()
     else:
         frag, extra = _cid_match_sql('customer_id', customer_id)
         frag = ' AND ' + frag
-    params.update(extra)
-    return bool(db.execute(text(sql + frag), params).scalar())
+    for n in variants:
+        if not n:
+            continue
+        params = dict(extra, n=n)
+        if db.execute(text(
+            "SELECT COUNT(*) FROM dsip_ufi_sms_black WHERE num=:n" + frag
+        ), params).scalar():
+            return True
+    return False
 
 
 def _black_nums(db, customer_id=_CID_UNSET):
@@ -541,9 +547,12 @@ def _pick_channel(db, prefer_imei=None, pol=None, pool_id=None, customer_id=_CID
 
 
 # ---------------------------------------------------------------- SIP sender
-def sip_send_message(imei, peer, body, timeout=8.0):
+def sip_send_message(imei, peer, body, timeout=8.0, from_user=None):
     """raw SIP MESSAGE -> Kamailio(127.0.0.1:5060) -> route[SMS_RELAY] -> UFI。
-    返回 (code, reason)。200=UFI 已接收（通道确认）；0=无响应/超时。"""
+    返回 (code, reason)。200=UFI 已接收（通道确认）；0=无响应/超时。
+
+    X-SMS / X-VOLTE 必须带完整对端号码（含 +国家码）；From 用通道 SIM，避免把 +E.164 塞进 SIP URI。
+    """
     try:
         domain = _ufi_auth_domain()
     except Exception:
@@ -559,6 +568,9 @@ def sip_send_message(imei, peer, body, timeout=8.0):
     tag = ''.join(random.choice('0123456789abcdef') for _ in range(8))
     callid = '%012x@sms-gw' % random.getrandbits(48)
     body_b = (body or '').encode('utf-8')
+    # From 仅数字/字母（SIM）；peer 可含 +，只放自定义头
+    from_u = re.sub(r'[^\w]', '', str(from_user or imei or 'sms')) or 'sms'
+    peer_hdr = str(peer or '').strip()
     pkt = (
         'MESSAGE sip:%s@%s SIP/2.0\r\n'
         'Via: SIP/2.0/UDP 127.0.0.1:%d;branch=%s;rport\r\n'
@@ -572,9 +584,9 @@ def sip_send_message(imei, peer, body, timeout=8.0):
         'Content-Type: text/plain; charset=UTF-8\r\n'
         'Content-Length: %d\r\n'
         '\r\n%s'
-    ) % (imei, domain, lport, branch, peer or 'sms', domain, tag, imei, domain, callid, peer or '', peer or '', len(body_b), body or '')
+    ) % (imei, domain, lport, branch, from_u, domain, tag, imei, domain, callid, peer_hdr, peer_hdr, len(body_b), body or '')
     try:
-        udp.sendto(pkt.encode('utf-8'), ('127.0.0.1', 5060))
+        udp.sendto(pkt.encode('utf-8'), ('127.0.0.1', 10560))
         data, _addr = udp.recvfrom(4096)
         line = data.decode('utf-8', 'ignore').splitlines()[0]
         parts = line.split(' ', 2)
@@ -598,8 +610,10 @@ _SMS_ADDR_RE = re.compile(r'^[0-9A-Za-z+*#.\-]{2,64}$')
 def norm_sms_addr(v):
     """规范化短信地址：E.164(+国际号) / 大陆手机号 / 短号 / 字母数字短码。
 
-    带 ``+`` 的国际号保留为 ``+digits``，便于全球国家识别；
-    大陆 11 位 ``1…`` 仍可无 ``+`` 入库（兼容存量）。
+    - 带 ``+``：一律保留 ``+digits``（含 +86，不剥国家码，跨国短信 / X-SMS 需要）
+    - ``00…``：转成 ``+…``
+    - ``861…`` / ``0861…``（无加号的中国国际格式）：升为 ``+861…``，不再剥成 11 位
+    - 纯 11 位 ``1…``：保持本地号（国内发国内）
     """
     s = str(v or '').strip()
     if not s:
@@ -608,14 +622,11 @@ def norm_sms_addr(v):
     if s.startswith('00') and len(s) > 2 and s[2:].isdigit():
         s = '+' + s[2:]
 
-    # E.164: keep +digits (do not strip country code)
+    # E.164: keep +digits including +86 (country code required for intl SMS / X-SMS)
     if s.startswith('+'):
         digits = re.sub(r'\D', '', s[1:])
         if not digits or len(digits) < 2 or len(digits) > 15:
             return ''
-        # Normalize +86XXXXXXXXXXX mainland mobile → local 11-digit for CN routing
-        if digits.startswith('86') and len(digits) == 13 and digits[2:].startswith('1'):
-            return digits[2:]
         return ('+' + digits)[:64]
 
     # Alphanumeric / service shortcodes (* # letters)
@@ -623,10 +634,11 @@ def norm_sms_addr(v):
         return s[:64] if _SMS_ADDR_RE.match(s) else ''
 
     digits = re.sub(r'\D', '', s)
+    # 无 + 的中国国际号 → 升为 E.164，避免跨国 X-SMS 丢国家码
     if digits.startswith('086') and len(digits) == 14 and digits[3:].startswith('1'):
-        digits = digits[3:]
-    elif digits.startswith('86') and len(digits) == 13 and digits[2:].startswith('1'):
-        digits = digits[2:]
+        return ('+86' + digits[3:])[:64]
+    if digits.startswith('86') and len(digits) == 13 and digits[2:].startswith('1'):
+        return ('+86' + digits[2:])[:64]
     return digits[:64] if digits else ''
 
 
@@ -638,6 +650,19 @@ def is_cn_mobile(v):
         d = a[1:]
         return d.startswith('86') and len(d) == 13 and bool(_CN_MOBILE_RE.match(d[2:]))
     return bool(_CN_MOBILE_RE.match(a))
+
+
+def _cn_addr_variants(num):
+    """大陆号黑名单比对：+861… 与 11 位本地号互认。"""
+    a = norm_sms_addr(num)
+    if not a:
+        return set()
+    out = {a}
+    if a.startswith('+86') and len(a) == 14 and _CN_MOBILE_RE.match(a[3:]):
+        out.add(a[3:])
+    elif _CN_MOBILE_RE.match(a):
+        out.add('+86' + a)
+    return out
 
 
 def is_valid_sms_addr(v):
@@ -787,7 +812,7 @@ def _do_send(db, peer, body, prefer_imei=None, task_id=0, pol=None, pool_id=None
              'tid': task_id, 'cid': cid, 'now': now})
         db.commit()
         msg_id = cur.lastrowid
-        code, reason = sip_send_message(ch['imei'], peer, body)
+        code, reason = sip_send_message(ch['imei'], peer, body, from_user=ch.get('sim') or ch['imei'])
         if code == 200:
             state, err = 'delivered', ''
         else:
@@ -1894,9 +1919,10 @@ def sms_pool_members():
     try:
         db = startSession()
         _ensure_sms_tables(db)
-        from modules.api.ufi_comm import _ensure_comm_tables
+        from modules.api.ufi_comm import _ensure_comm_tables, _ensure_pool_strategy_tables
         from modules.api.acl import customer_sql, ensure_acl_tables
         _ensure_comm_tables(db)
+        _ensure_pool_strategy_tables(db)
         ensure_acl_tables(db)
         csql, cparams = customer_sql('d')
         rows = db.execute(text(

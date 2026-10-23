@@ -190,6 +190,15 @@
     return '';
   }
 
+  /** 设备开关字段统一成 '1'/'0'（固件常报 ON/OFF，列表却按 === '1' 判断） */
+  function flag01(v, def) {
+    const s = String(v == null ? '' : v).trim().toLowerCase();
+    if (!s) return def == null ? '0' : String(def);
+    if (s === '1' || s === 'on' || s === 'true' || s === 'yes' || s === 'enable' || s === 'enabled') return '1';
+    if (s === '0' || s === 'off' || s === 'false' || s === 'no' || s === 'disable' || s === 'disabled') return '0';
+    return def == null ? '0' : String(def);
+  }
+
   function parseTs(value) {
     if (value == null || value === '') return Date.now();
     if (typeof value === 'number') return value < 1e12 ? value * 1000 : value;
@@ -220,11 +229,11 @@
       networkType: String(pick(row, 'networkType', 'network_type') || 'none'),
       wlanName: String(pick(row, 'wlanName') || ''),
       wlanPassword: String(pick(row, 'wlanPassword') || ''),
-      volteRegisterStatus: String(pick(row, 'volteRegisterStatus', 'volte_status') || '0'),
-      voipRegisterStatus: String(pick(row, 'voipRegisterStatus', 'voip_status') || (row.online ? '1' : '0')),
-      websocketStatus: String(pick(row, 'websocketStatus', 'ws_status') || (row.ws_online ? '1' : '0')),
-      wfcStatus: String(pick(row, 'wfcStatus', 'wfc_status') || '0'),
-      airplaneMode: String(pick(row, 'airplaneMode', 'airplane_mode') || '0'),
+      volteRegisterStatus: flag01(pick(row, 'volteRegisterStatus', 'volte_status'), '0'),
+      voipRegisterStatus: flag01(pick(row, 'voipRegisterStatus', 'voip_status'), row.online ? '1' : '0'),
+      websocketStatus: flag01(pick(row, 'websocketStatus', 'ws_status'), row.ws_online ? '1' : '0'),
+      wfcStatus: flag01(pick(row, 'wfcStatus', 'wfc_status', 'wlanCallingStatus', 'wifiCallingStatus'), '0'),
+      airplaneMode: flag01(pick(row, 'airplaneMode', 'airplane_mode'), '0'),
       cellularSignalLevel: String(pick(row, 'cellularSignalLevel', 'signal_level') || '0'),
       signalRaw: Number(pick(row, 'cellularSignalLevel', 'signal_level') || 0),
       rsrp: row.rsrp == null ? null : Number(row.rsrp),
@@ -238,7 +247,7 @@
       buildNumber: String(pick(row, 'buildNumber', 'build_number') || ''),
       apkVersion: String(pick(row, 'apkVersion') || ''),
       sipServerAddress: String(pick(row, 'sipServerAddress', 'sip_domain') || ''),
-      sipServerPort: Number(pick(row, 'sipServerPort') || 5060),
+      sipServerPort: Number(pick(row, 'sipServerPort') || 10560),
       sippassWord: String(pick(row, 'sippassWord') || ''),
       transportProtocol: String(pick(row, 'transportProtocol') || 'UDP'),
       encryptionType: String(pick(row, 'encryptionType') || 'dtls'),

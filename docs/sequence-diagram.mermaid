@@ -18,3 +18,14 @@ sequenceDiagram
     A-->>D: " AND EXISTS(SELECT 1 FROM dsip_ufi_device _d WHERE _d.imei=c.imei AND _d.customer_id=:__cid)"
     D->>DB: SELECT ... FROM dsip_ufi_call c WHERE ... EXISTS(...)
     DB-->>D: 仅本租户通话
+
+    Note over D,DB: v3 即插即用归属（设备自注册）
+    D->>A: resolve_device_customer(imei, sim)
+    A->>DB: SELECT customer_id FROM dsip_ufi_import WHERE imei=:imei (fallback sim)
+    alt 命中预置
+        A-->>D: customer_id=X
+        D->>DB: UPSERT dsip_ufi_device (customer_id=X, claim_status=1)
+    else 未命中
+        A-->>D: None
+        D->>DB: UPSERT dsip_ufi_device (customer_id=NULL, claim_status=0)
+    end

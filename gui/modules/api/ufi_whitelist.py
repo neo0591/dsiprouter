@@ -269,10 +269,13 @@ def whitelist_root():
         # list / create entries
         if request.method == 'GET':
             cfg = get_cfg(db)
+            from modules.api.acl import customer_sql, ensure_acl_tables
+            ensure_acl_tables(db)
+            frag, fp = customer_sql()
             rows = db.execute(text(
                 "SELECT id, cidr, scope, note, enabled, created FROM dsip_ip_whitelist "
-                "ORDER BY scope, id DESC"
-            )).mappings().all()
+                "WHERE 1=1" + frag + " ORDER BY scope, id DESC"
+            ), fp).mappings().all()
             out = []
             for r in rows:
                 d = dict(r)
@@ -297,10 +300,12 @@ def whitelist_root():
         note = str(d.get('note') or '').strip()[:255]
         now = datetime.now()
         try:
+            from modules.api.acl import stamp_customer, ensure_acl_tables
+            ensure_acl_tables(db)
             db.execute(text(
-                "INSERT INTO dsip_ip_whitelist (cidr, scope, note, enabled, created) "
-                "VALUES (:c, :s, :n, 1, :t)"
-            ), {'c': cidr, 's': scope, 'n': note, 't': now})
+                "INSERT INTO dsip_ip_whitelist (cidr, scope, note, enabled, created, customer_id) "
+                "VALUES (:c, :s, :n, 1, :t, :cid)"
+            ), {'c': cidr, 's': scope, 'n': note, 't': now, 'cid': stamp_customer(db)})
             rid = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
             db.commit()
         except Exception:
@@ -334,9 +339,14 @@ def whitelist_item(wid):
         if request.method == 'DELETE':
             action = 'del'
 
+        from modules.api.acl import customer_sql, ensure_acl_tables
+        ensure_acl_tables(db)
+        frag, fp = customer_sql()
+        params = {'i': wid}
+        params.update(fp)
         row = db.execute(text(
-            "SELECT id FROM dsip_ip_whitelist WHERE id=:i"
-        ), {'i': wid}).first()
+            "SELECT id FROM dsip_ip_whitelist WHERE id=:i" + frag
+        ), params).first()
         if not row:
             return createApiResponse(error='http', status_code=404, msg='条目不存在')
 

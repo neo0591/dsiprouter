@@ -32,6 +32,15 @@ classDiagram
         +int id
         +string imei
         +int customer_id
+        +tinyint claim_status
+    }
+    class dsip_ufi_import {
+        +int id
+        +int customer_id
+        +string imei
+        +string sim
+        +bool matched
+        +datetime matched_at
     }
     class dsip_ufi_pool {
         +int id
@@ -62,3 +71,5 @@ classDiagram
     dsip_ufi_pool "1" --> "*" dsip_ufi_pool_did : pool_id
     dsip_customer "1" --> "*" dr_gw_lists : customer_id
     dsip_customer "1" --> "*" subscriber : domain
+    dsip_customer "1" --> "*" dsip_ufi_import : 预置归属
+    dsip_ufi_import "1" --> "0..1" dsip_ufi_device : imei 匹配
